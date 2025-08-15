@@ -13,11 +13,15 @@ sys.path.insert(0, current_dir)
 
 try:
     from rag.query import search_chunks, supabase
+    from rag.match_forms import search_forms
     print("✅ DEBUG: RAG imports successful")
 except ImportError as e:
     print(f"❌ DEBUG: RAG import failed: {e}")
     def search_chunks(query, top_k=5, country=None, agency=None):
         print(f"⚠️ DEBUG: Dummy search_chunks called with: {query}")
+        return []
+    def search_forms(query, top_k=5):
+        print(f"⚠️ DEBUG: Dummy search_forms called with: {query}")
         return []
     supabase = None
 
@@ -127,10 +131,8 @@ with st.sidebar:
 
 # Chat input first — append messages immediately
 if prompt := st.chat_input("Ask me anything..."):
-    # Append user message
     st.session_state.messages.append({"role": "user", "content": prompt})
 
-    # Call API and append assistant message before rendering
     try:
         with st.spinner("🔄 Generating response via API..."):
             messages = [
@@ -165,7 +167,6 @@ if prompt := st.chat_input("Ask me anything..."):
                     response_data = response.json()
                     response_text = response_data["choices"][0]["message"]["content"]
 
-                    # Store assistant message with original user query
                     st.session_state.messages.append({
                         "role": "assistant",
                         "content": response_text,
@@ -176,37 +177,61 @@ if prompt := st.chat_input("Ask me anything..."):
     except Exception as e:
         st.error(f"❌ Error generating response: {str(e)}")
 
-# Render chat history AFTER appending new messages
+# Render chat history
 for idx, message in enumerate(st.session_state.messages):
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-        # Always show Find Articles button for assistant messages
+        # Show buttons for assistant messages
         if message["role"] == "assistant":
-            if st.button(f"🔍 Find Relevant Articles", key=f"rag_btn_{idx}"):
-                try:
-                    rag_results = search_chunks(message["user_query"], top_k=3)
-                    if rag_results:
-                        st.markdown("### 📚 Relevant Documents")
-                        cols = st.columns(3)
-                        for i, result in enumerate(rag_results):
-                            col = cols[i] if i < 3 else None
-                            if col:
-                                with col:
-                                    st.markdown(f"""
-                                    <div class="rag-card">
-                                        <div class="rag-card-title">{i+1}. {result['title'][:40]}{'...' if len(result['title']) > 40 else ''}</div>
-                                        <div class="rag-card-content">{result['content'][:100]}{'...' if len(result['content']) > 100 else ''}</div>
-                                        <div class="rag-card-meta">
-                                            <strong>Relevance: {result['similarity']:.3f}</strong>
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("🔍 Find Relevant Articles", key=f"rag_btn_{idx}"):
+                    try:
+                        rag_results = search_chunks(message["user_query"], top_k=3)
+                        if rag_results:
+                            st.markdown("### 📚 Relevant Documents")
+                            cols = st.columns(3)
+                            for i, result in enumerate(rag_results):
+                                col = cols[i] if i < 3 else None
+                                if col:
+                                    with col:
+                                        st.markdown(f"""
+                                        <div class="rag-card">
+                                            <div class="rag-card-title">{i+1}. {result['title'][:40]}{'...' if len(result['title']) > 40 else ''}</div>
+                                            <div class="rag-card-content">{result['content'][:100]}{'...' if len(result['content']) > 100 else ''}</div>
+                                            <div class="rag-card-meta">
+                                                <strong>Relevance: {result['similarity']:.3f}</strong>
+                                            </div>
+                                            <a href="{result['url']}" target="_blank" class="rag-card-link">🔗 View Document</a>
                                         </div>
-                                        <a href="{result['url']}" target="_blank" class="rag-card-link">🔗 View Document</a>
-                                    </div>
-                                    """, unsafe_allow_html=True)
-                    else:
-                        st.warning("❌ No relevant documents found.")
-                except Exception as e:
-                    st.warning(f"⚠️ RAG search failed: {str(e)}")
+                                        """, unsafe_allow_html=True)
+                        else:
+                            st.warning("❌ No relevant documents found.")
+                    except Exception as e:
+                        st.warning(f"⚠️ RAG search failed: {str(e)}")
+            with col2:
+                if st.button("📝 Find Relevant Forms", key=f"form_btn_{idx}"):
+                    try:
+                        form_results = search_forms(message["user_query"], top_k=3)
+                        if form_results:
+                            st.markdown("### 📄 Relevant Forms")
+                            cols = st.columns(3)
+                            for i, result in enumerate(form_results):
+                                col = cols[i] if i < 3 else None
+                                if col:
+                                    with col:
+                                        st.markdown(f"""
+                                        <div class="rag-card">
+                                            <div class="rag-card-title">{i+1}. {result['title'][:40]}{'...' if len(result['title']) > 40 else ''}</div>
+                                            <div class="rag-card-content">{result.get('description', '')[:100]}{'...' if len(result.get('description', '')) > 100 else ''}</div>
+                                            <a href="{result['url']}" target="_blank" class="rag-card-link">📄 Open Form</a>
+                                        </div>
+                                        """, unsafe_allow_html=True)
+                        else:
+                            st.warning("❌ No relevant forms found.")
+                    except Exception as e:
+                        st.warning(f"⚠️ Form search failed: {str(e)}")
 
 # Footer
 st.markdown("---")
