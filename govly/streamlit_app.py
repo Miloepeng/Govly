@@ -3,7 +3,12 @@ import requests
 import os
 import json
 from dotenv import load_dotenv
+
+# Load environment variables
 load_dotenv()
+
+# Import RAG functionality
+from rag.query import search_chunks, supabase
 
 # Page config
 st.set_page_config(
@@ -120,28 +125,79 @@ if prompt := st.chat_input("Ask me anything..."):
                     }
                     
                     payload = {
-                        "model": "aisingapore/Llama-SEA-LION-v3-70B-IT",
+                        "max_completion_tokens": max_tokens,
                         "messages": messages,
-                        "max_tokens": max_tokens,
+                        "model": "aisingapore/Llama-SEA-LION-v3-70B-IT",
                         "temperature": temperature,
-                        "thinking_mode": thinking_mode  
+                        "thinking_mode": thinking_mode
                     }
                     
                     # Make API request
                     response = requests.post(
                         "https://api.sea-lion.ai/v1/chat/completions",
                         headers=headers,
-                        json={
-                            "max_completion_tokens": max_tokens,
-                            "messages": messages,
-                            "model": "aisingapore/Llama-SEA-LION-v3-70B-IT"
-                        },
+                        json=payload,
                         timeout=60
                     )
                     
                     if response.status_code == 200:
                         response_data = response.json()
                         response_text = response_data["choices"][0]["message"]["content"]
+                        
+                        # Now perform RAG search and add relevant links
+                        try:
+                            st.info("🔍 Searching for relevant documents...")
+                            rag_results = search_chunks(prompt, top_k=3)
+                            
+                            if rag_results:
+                                # Display RAG results in beautiful cards
+                                st.markdown("### 📚 Relevant Documents Found")
+                                
+                                for i, result in enumerate(rag_results, 1):
+                                    with st.container():
+                                        st.markdown("---")
+                                        
+                                        # Create a card-like container
+                                        col1, col2 = st.columns([3, 1])
+                                        
+                                        with col1:
+                                            # Document title and content
+                                            st.markdown(f"**{i}. {result['title']}**")
+                                            
+                                            # Content preview with expandable "Read more"
+                                            content = result['content']
+                                            sentences = content.split('. ')
+                                            
+                                            if len(sentences) > 3:
+                                                # Show first 3 sentences initially
+                                                preview = '. '.join(sentences[:3]) + '.'
+                                                
+                                                # Create expandable section
+                                                with st.expander(f"📝 **Preview:** {preview}...", expanded=False):
+                                                    st.markdown(f"**Full Content:**\n\n{content}")
+                                            else:
+                                                # If 3 or fewer sentences, show full content
+                                                st.markdown(f"📝 **Content:** {content}")
+                                            
+                                            # Source link
+                                            st.markdown(f"🔗 **Source:** [{result['url']}]({result['url']})")
+                                        
+                                        with col2:
+                                            # Relevance score in a nice box
+                                            score = result['similarity']
+                                            
+                                            st.metric(
+                                                label="Relevance Score",
+                                                value=f"{score:.3f}"
+                                            )
+                                    
+                                    st.markdown("---")
+                            else:
+                                st.warning("❌ **No relevant documents found in database.**")
+                                
+                        except Exception as e:
+                            st.warning(f"⚠️ RAG search failed: {str(e)}")
+                            st.info("⚠️ **RAG search unavailable**")
                         
                         # Display response
                         message_placeholder.markdown(response_text)
