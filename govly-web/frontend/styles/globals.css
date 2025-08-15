@@ -1,0 +1,198 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ChatGPT-like styling */
+:root {
+  --chatgpt-bg: #ffffff;
+  --chatgpt-sidebar: #f7f7f8;
+  --chatgpt-border: #e5e5e5;
+  --chatgpt-text: #374151;
+  --chatgpt-text-light: #6b7280;
+  --chatgpt-blue: #2563eb;
+  --chatgpt-blue-hover: #1d4ed8;
+  --chatgpt-gray: #f7f7f8;
+  --chatgpt-gray-hover: #f3f4f6;
+  --chatgpt-input: #ffffff;
+  --chatgpt-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+}
+
+body {
+  background-color: var(--chatgpt-bg);
+  color: var(--chatgpt-text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
+
+/* Line clamp utilities */
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.line-clamp-3 {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Custom slider styles */
+.slider::-webkit-slider-thumb {
+  appearance: none;
+  height: 20px;
+  width: 20px;
+  border-radius: 50%;
+  background: var(--chatgpt-blue);
+  cursor: pointer;
+  border: 2px solid #ffffff;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.slider::-moz-range-thumb {
+  height: 20px;
+  width: 20px;
+  border-radius: 50%;
+  background: var(--chatgpt-blue);
+  cursor: pointer;
+  border: 2px solid #ffffff;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
+}
+
+/* Smooth transitions */
+* {
+  transition: all 0.2s ease-in-out;
+}
+
+/* Focus styles */
+.focus-ring:focus {
+  outline: 2px solid var(--chatgpt-blue);
+  outline-offset: 2px;
+}
+
+/* ChatGPT-like message styling */
+.chat-message-user {
+  background: #ffffff;
+  color: var(--chatgpt-text);
+  border-radius: 18px;
+  box-shadow: var(--chatgpt-shadow);
+  border: 1px solid var(--chatgpt-border);
+}
+
+.chat-message-assistant {
+  background: var(--chatgpt-gray);
+  color: var(--chatgpt-text);
+  border-radius: 18px;
+  box-shadow: var(--chatgpt-shadow);
+  border: 1px solid var(--chatgpt-border);
+}
+
+/* Modern input styling */
+.modern-input {
+  background: var(--chatgpt-input);
+  border: 2px solid var(--chatgpt-border);
+  border-radius: 24px;
+  box-shadow: var(--chatgpt-shadow);
+  transition: all 0.2s ease;
+}
+
+.modern-input:focus {
+  border-color: var(--chatgpt-blue);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+/* Modern button styling */
+.modern-button {
+  background: var(--chatgpt-blue);
+  color: white;
+  border-radius: 24px;
+  box-shadow: var(--chatgpt-shadow);
+  transition: all 0.2s ease;
+}
+
+.modern-button:hover {
+  background: var(--chatgpt-blue-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+}
+
+.modern-button:active {
+  transform: translateY(0);
+}
+
+/* RAG card styling */
+.rag-card {
+  background: white;
+  border: 1px solid var(--chatgpt-border);
+  border-radius: 16px;
+  box-shadow: var(--chatgpt-shadow);
+  transition: all 0.2s ease;
+}
+
+.rag-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+  border-color: var(--chatgpt-blue);
+}
+
+/* Sidebar styling */
+.modern-sidebar {
+  background: var(--chatgpt-sidebar);
+  border-right: 1px solid var(--chatgpt-border);
+}
+
+/* Header styling */
+.modern-header {
+  background: white;
+  border-bottom: 1px solid var(--chatgpt-border);
+  backdrop-filter: blur(10px);
+  background: rgba(255, 255, 255, 0.95);
+}
+
+/* Animation utilities */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideIn {
+  from { opacity: 0; transform: translateX(-20px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.25s ease-out;
+}
+
+.animate-slide-in {
+  animation: slideIn 0.25s ease-out;
+}
+
+/* Hover effects */
+.hover-lift {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.hover-lift:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+} 
