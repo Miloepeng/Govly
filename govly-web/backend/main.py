@@ -1,11 +1,12 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Optional, Any, Dict
 import os
 import sys
 import requests
 import tempfile
+import json
 
 # Add current directory to Python path
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -292,6 +293,135 @@ async def extract_form(request: ExtractFormRequest):
     except Exception as e:
         print("💥 Exception in extract_form:", e)
         raise HTTPException(status_code=500, detail=str(e))
+
+#Fill form endpoint
+import json
+import re
+from typing import List, Dict, Any
+from fastapi import HTTPException
+
+class FillFormRequest(BaseModel):
+    form_schema: Dict[str, Any]
+    chat_history: List[Dict[str, Any]]   # allow extra keys
+
+def clean_llm_output(text: str) -> str:
+    """Remove markdown fences and stray chars from LLM JSON output."""
+    text = re.sub(r"^```[a-zA-Z]*\s*", "", text)  # remove leading ```json
+    text = re.sub(r"```$", "", text)              # remove trailing ```
+    return text.strip()
+
+def try_parse_json(text: str):
+    text = clean_llm_output(text)
+
+    # First: direct parse
+    try:
+        return json.loads(text)
+    except Exception:
+        pass
+
+    # Second: extract full { ... }
+    match = re.search(r"\{.*\}", text, re.DOTALL)
+    if match:
+        json_str = match.group(0)
+        json_str = re.sub(r"[\x00-\x1F\x7F]", "", json_str)
+        try:
+            return json.loads(json_str)
+        except Exception:
+            pass
+
+    # Third: salvage just the "fields" array
+    match = re.search(r'\"fields\"\s*:\s*\[.*', text, re.DOTALL)
+    if match:
+        arr_str = match.group(0)
+
+        # Close dangling quotes
+        if arr_str.count('"') % 2 == 1:
+            arr_str += '"'
+
+        # Ensure closing ]
+        if not arr_str.endswith("]"):
+            arr_str += "]"
+
+        json_str = "{ " + arr_str + " }"
+        json_str = re.sub(r"[\x00-\x1F\x7F]", "", json_str)
+
+        try:
+            return json.loads(json_str)
+        except Exception:
+            # Last resort: drop any trailing incomplete object
+            fixed = re.sub(r",\s*{[^}]*$", "", arr_str) + "]"
+            json_str = "{ " + fixed + " }"
+            return json.loads(json_str)
+
+    raise ValueError("Unable to parse JSON")
+
+@app.post("/api/fillForm")
+async def fill_form(request: FillFormRequest):
+    try:
+        api_key = os.getenv("SEA_LION_API_KEY")
+        if not api_key:
+            raise HTTPException(status_code=500, detail="SEA_LION_API_KEY not found")
+
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        }
+
+        # --- Stricter system prompt ---
+        system_prompt = """
+You are SEA-LION, a Southeast Asian LLM helping users fill forms. 
+Given the conversation so far and the blank form schema, propose values for each field.
+
+⚠️ RULES:
+- Output MUST be STRICT JSON only.
+- No explanations, no markdown fences, no comments.
+- The ONLY valid format is:
+{ "fields": [ { "name": "...", "value": "..." }, ... ] }
+- If you cannot fill a field, set its value to "ASK_USER".
+- VERY IMPORTANT: Always close the JSON properly with matching ] and }.
+"""
+
+        messages = [{"role": "system", "content": system_prompt}]
+        for msg in request.chat_history:
+            if msg.get("role") in ["user", "assistant"] and msg.get("content"):
+                messages.append({"role": msg["role"], "content": msg["content"]})
+
+        messages.append({
+            "role": "user",
+            "content": f"Here is the form schema: {request.form_schema}"
+        })
+
+        payload = {
+            "max_completion_tokens": 700,   # adjusted so output fits
+            "messages": messages,
+            "model": "aisingapore/Llama-SEA-LION-v3-70B-IT",
+            "temperature": 0.3,
+        }
+
+        response = requests.post(
+            "https://api.sea-lion.ai/v1/chat/completions",
+            headers=headers,
+            json=payload,
+            timeout=180  # allow longer time for large forms
+        )
+
+        if response.status_code != 200:
+            raise HTTPException(status_code=response.status_code, detail="SEA-LION API error")
+
+        response_data = response.json()
+        raw_text = response_data["choices"][0]["message"]["content"].strip()
+
+        # --- Robust parse ---
+        try:
+            return try_parse_json(raw_text)
+        except Exception as e:
+            print("❌ Final JSON parse failure:", e, raw_text)
+            raise HTTPException(status_code=500, detail="Invalid JSON from LLM")
+
+    except Exception as e:
+        print("💥 Exception in fill_form:", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 
 if __name__ == "__main__":

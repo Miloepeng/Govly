@@ -30,9 +30,57 @@ export default function DynamicForm({ schema }: { schema: Schema }) {
     alert("Form submitted! Check console for output.");
   };
 
+  // --- NEW: AI-assisted fill ---
+  const handleFillWithAI = async () => {
+  try {
+    // Get full chat history from localStorage
+    const rawHistory = JSON.parse(localStorage.getItem("chatHistory") || "[]");
+
+    // Filter to only what SEA-LION needs
+    const filteredHistory = rawHistory.map((m: any) => ({
+      role: m.role,
+      content: m.content,
+    }));
+
+    const response = await fetch("http://localhost:8000/api/fillForm", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        form_schema: schema,
+        chat_history: filteredHistory,
+      }),
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      console.log("🤖 AI suggested values:", data);
+
+      const filled: Record<string, any> = {};
+      data.fields.forEach((f: any) => {
+        filled[f.name] = f.value !== "ASK_USER" ? f.value : "";
+      });
+      setFormData(filled);
+    } else {
+      console.error("Failed to fill form with AI");
+    }
+  } catch (err) {
+    console.error("Error in AI fill:", err);
+  }
+};
+
+
   return (
     <div className="p-4 border rounded-lg bg-white shadow">
       <h2 className="text-lg font-semibold mb-4">Dynamic Form</h2>
+
+      {/* NEW BUTTON */}
+      <button
+        type="button"
+        onClick={handleFillWithAI}
+        className="mb-4 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
+      >
+        Ask SEA-LION to help
+      </button>
 
       <form className="space-y-4" onSubmit={handleSubmit}>
         {schema.fields.map((field, index) => (
@@ -47,7 +95,10 @@ export default function DynamicForm({ schema }: { schema: Schema }) {
                 type="text"
                 placeholder={field.description || ""}
                 required={field.required}
-                className="border px-3 py-2 rounded-md"
+                value={formData[field.name] || ""}
+                className={`border px-3 py-2 rounded-md ${
+                  formData[field.name] === "" ? "bg-yellow-50" : ""
+                }`}
                 onChange={(e) => handleChange(field.name, e.target.value)}
               />
             )}
@@ -56,7 +107,10 @@ export default function DynamicForm({ schema }: { schema: Schema }) {
               <input
                 type="date"
                 required={field.required}
-                className="border px-3 py-2 rounded-md"
+                value={formData[field.name] || ""}
+                className={`border px-3 py-2 rounded-md ${
+                  formData[field.name] === "" ? "bg-yellow-50" : ""
+                }`}
                 onChange={(e) => handleChange(field.name, e.target.value)}
               />
             )}
@@ -64,6 +118,7 @@ export default function DynamicForm({ schema }: { schema: Schema }) {
             {field.type === "checkbox" && (
               <input
                 type="checkbox"
+                checked={formData[field.name] || false}
                 className="h-4 w-4"
                 onChange={(e) => handleChange(field.name, e.target.checked)}
               />
@@ -74,7 +129,10 @@ export default function DynamicForm({ schema }: { schema: Schema }) {
                 type="text"
                 placeholder="Signature"
                 required={field.required}
-                className="border px-3 py-2 rounded-md italic text-gray-500"
+                value={formData[field.name] || ""}
+                className={`border px-3 py-2 rounded-md italic text-gray-500 ${
+                  formData[field.name] === "" ? "bg-yellow-50" : ""
+                }`}
                 onChange={(e) => handleChange(field.name, e.target.value)}
               />
             )}

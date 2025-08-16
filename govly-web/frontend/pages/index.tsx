@@ -59,6 +59,10 @@ export default function Home() {
     scrollToBottom();
   }, [messages]);
 
+  useEffect(() => {
+  localStorage.setItem("chatHistory", JSON.stringify(messages));
+}, [messages]);
+
   const handleSendMessage = async () => {
     if (!input.trim() || isLoading) return;
 
