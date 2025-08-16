@@ -1,44 +1,103 @@
 # 🏛️ Govly - Smart Government Services Advisor
 
-A comprehensive AI-powered government services advisor that intelligently routes user queries, provides relevant policy documents and forms, and tracks application progress through a conversational interface.
+A comprehensive AI-powered government services advisor that intelligently routes user queries, provides relevant policy documents and forms, and tracks application progress through a conversational interface. Created by Shao Zhi, Yi Ting, Yong Sheng from NUS.
 
 ## 🚀 Quick Start
 
 ### Prerequisites
-- Node.js 18+ 
-- Python 3.8+
-- Supabase account with pgvector extension enabled
-- SEA-LION API key
+- **Node.js 18+** (Download from [nodejs.org](https://nodejs.org/))
+- **Python 3.8+** (Download from [python.org](https://python.org/))
+- **Git** (Download from [git-scm.com](https://git-scm.com/))
+- **Supabase account** with pgvector extension enabled
+- **SEA-LION API key** (Contact @ShaoZhi21 on Telegram)
 
-### Backend Setup
+### 🐍 Backend Setup
+
+1. **Clone and navigate to backend:**
    ```bash
-cd govly-web/backend
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-pip install -r requirements.txt
-
-# Set environment variables
-export SEA_LION_API_KEY="your_api_key_here"
-export SUPABASE_URL="your_supabase_project_url"
-export SUPABASE_KEY="your_supabase_anon_key"
-
-# Start the backend
-python main.py
-```
-
-### Frontend Setup
-   ```bash
-cd govly-web/frontend
-npm install
-npm run dev
+   cd govly-web/backend
    ```
 
-### Database Setup
+2. **Create Python virtual environment:**
    ```bash
-# Enable pgvector extension in Supabase
-# Go to your Supabase dashboard → Database → Extensions → Enable 'vector'
+   # On macOS/Linux:
+   python3 -m venv venv
+   source venv/bin/activate
+   
+   # On Windows:
+   python -m venv venv
+   venv\Scripts\activate
+   ```
 
-# Create the required tables (run in Supabase SQL editor)
+3. **Install dependencies:**
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+4. **Set environment variables:**
+   Please contact @ShaoZhi21 on telegram for the keys.
+   ```bash
+   # On macOS/Linux:
+   export SEA_LION_API_KEY="your_api_key_here"
+   export SUPABASE_URL="your_supabase_project_url"
+   export SUPABASE_KEY="your_supabase_anon_key"
+   
+   # On Windows:
+   set SEA_LION_API_KEY=your_api_key_here
+   set SUPABASE_URL=your_supabase_project_url
+   set SUPABASE_KEY=your_supabase_anon_key
+   
+   # Or create a .env file:
+   echo "SEA_LION_API_KEY=your_api_key_here" > .env
+   echo "SUPABASE_URL=your_supabase_project_url" >> .env
+   echo "SUPABASE_KEY=your_supabase_anon_key" >> .env
+   ```
+
+5. **Start the backend:**
+   ```bash
+   python main.py
+   ```
+   
+   The backend will start on `http://localhost:8000`
+
+### ⚛️ Frontend Setup
+
+1. **Navigate to frontend directory:**
+   ```bash
+   cd govly-web/frontend
+   ```
+
+2. **Install Node.js dependencies:**
+   ```bash
+   npm install
+   ```
+
+3. **Start development server:**
+   ```bash
+   npm run dev
+   ```
+   
+   The frontend will start on `http://localhost:3000`
+
+### 🗄️ Database Setup
+
+   Please contact @ShaoZhi21 on telegram and use our supabase for convenience.
+
+1. **Create Supabase project:**
+   - Go to [supabase.com](https://supabase.com)
+   - Create new project
+   - Note your project URL and anon key
+
+2. **Enable pgvector extension:**
+   - Go to Supabase Dashboard → Database → Extensions
+   - Search for "vector" and enable it
+
+3. **Create database tables:**
+   - Go to Supabase Dashboard → SQL Editor
+   - Run the following SQL:
+
+```sql
+-- Create chunks table for policy documents
 CREATE TABLE IF NOT EXISTS chunks (
   id SERIAL PRIMARY KEY,
   country TEXT,
@@ -49,6 +108,7 @@ CREATE TABLE IF NOT EXISTS chunks (
   embedding vector(1024)
 );
 
+-- Create forms table for government forms
 CREATE TABLE IF NOT EXISTS forms (
   id SERIAL PRIMARY KEY,
   country TEXT,
@@ -59,7 +119,7 @@ CREATE TABLE IF NOT EXISTS forms (
   embedding vector(1024)
 );
 
-# Create the similarity search functions
+-- Create similarity search function for chunks
 CREATE OR REPLACE FUNCTION match_chunks(
   query_embedding vector(1024),
   match_count int DEFAULT 5,
@@ -95,6 +155,7 @@ BEGIN
 END;
 $$;
 
+-- Create similarity search function for forms
 CREATE OR REPLACE FUNCTION match_forms(
   query_embedding vector(1024),
   match_count int DEFAULT 5,
@@ -129,11 +190,52 @@ BEGIN
   LIMIT match_count;
 END;
 $$;
+```
 
-# Run the embedding scripts
-cd govly-web/backend/rag
-python pre-embedding.py
-python embed_forms.py
+4. **Populate with sample data:**
+   ```bash
+   cd govly-web/backend/rag
+   python pre-embedding.py
+   python embed_forms.py
+   ```
+
+### 🔑 Getting API Keys
+
+**SEA-LION API Key:**
+- Create your own API Key.
+- Contact @ShaoZhi21 on Telegram and use ours.
+- This is required for the LLM functionality
+
+**Supabase Keys:**
+- Contact @ShaoZhi21 on Telegram and use our Supabase.
+- Found in your Supabase project dashboard
+- Project URL: Settings → API → Project URL
+- Anon Key: Settings → API → anon public key
+
+### 🚨 Troubleshooting
+
+**Backend won't start:**
+- Ensure virtual environment is activated
+- Check all environment variables are set
+- Verify Python 3.8+ is installed
+
+**Frontend won't start:**
+- Ensure Node.js 18+ is installed
+- Run `npm install` again if dependencies fail
+- Check if port 3000 is available
+
+**Database connection issues:**
+- Verify Supabase project is active
+- Check pgvector extension is enabled
+- Ensure API keys are correct
+
+### 🎯 One-Command Setup (Optional)
+
+For quick testing, you can use the provided start script:
+```bash
+./start.sh
+```
+This will start both backend and frontend automatically.
 ```
 
 ## 🏗️ System Architecture
@@ -420,41 +522,12 @@ interface Application {
 
 ## 🔧 Configuration
 
-### Environment Variables
-```bash
-SEA_LION_API_KEY=your_api_key_here
-SUPABASE_URL=your_supabase_project_url
-SUPABASE_KEY=your_supabase_anon_key
-```
+**Note**: For hackathon demo purposes, we're providing:
+- SEA-LION API key
+- Supabase instance with pre-configured database
+- All necessary environment variables
 
-### Database Configuration
-```sql
--- Enable pgvector extension in Supabase
--- Go to Dashboard → Database → Extensions → Enable 'vector'
-
--- Create tables for documents and forms
-CREATE TABLE IF NOT EXISTS chunks (
-  id SERIAL PRIMARY KEY,
-  country TEXT,
-  agency TEXT,
-  title TEXT,
-  url TEXT,
-  content TEXT,
-  embedding vector(1024)
-);
-
-CREATE TABLE IF NOT EXISTS forms (
-  id SERIAL PRIMARY KEY,
-  country TEXT,
-  agency TEXT,
-  title TEXT,
-  url TEXT,
-  content TEXT,
-  embedding vector(1024)
-);
-
--- Create similarity search functions (see Database Setup section above)
-```
+Contact @ShaoZhi21 on Telegram to get the keys and start immediately!
 
 ## 📁 Project Structure
 ```
@@ -507,25 +580,17 @@ System: Suggests business agencies, offers connection
 - **Data Validation**: Input validation on all endpoints
 - **Error Handling**: Comprehensive error handling and logging
 
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests if applicable
-5. Submit a pull request
-
 ## 📄 License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+This project is licensed under the MIT License.
 
-## 🆘 Support
+## 🆘 Support & Demo Access
 
-For support and questions:
-- Create an issue in the repository
-- Check the documentation
-- Review the code examples
+**For hackathon demo access:**
+- Contact @ShaoZhi21 on Telegram
+- Get immediate access to our API keys and Supabase instance
+- Start testing in under 5 minutes!
 
 ---
 
-**Built with ❤️ for better government services**
+**Built with ❤️ by Shao Zhi, Yi Ting, Yong Sheng from NUS**
