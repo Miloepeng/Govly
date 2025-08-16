@@ -12,7 +12,13 @@ interface Schema {
   fields: Field[];
 }
 
-export default function DynamicForm({ schema }: { schema: Schema }) {
+export default function DynamicForm({
+  schema,
+  onAskClarification,
+}: {
+  schema: Schema;
+  onAskClarification?: (fieldName: string, label: string) => void;
+}) {
   console.log("DynamicForm received schema:", schema); 
   const [formData, setFormData] = useState<Record<string, any>>({});
 
@@ -30,44 +36,51 @@ export default function DynamicForm({ schema }: { schema: Schema }) {
     alert("Form submitted! Check console for output.");
   };
 
-  // --- NEW: AI-assisted fill ---
+  // --- AI-assisted fill ---
   const handleFillWithAI = async () => {
-  try {
-    // Get full chat history from localStorage
-    const rawHistory = JSON.parse(localStorage.getItem("chatHistory") || "[]");
+    try {
+      // Get full chat history from localStorage
+      const rawHistory = JSON.parse(localStorage.getItem("chatHistory") || "[]");
 
-    // Filter to only what SEA-LION needs
-    const filteredHistory = rawHistory.map((m: any) => ({
-      role: m.role,
-      content: m.content,
-    }));
+      // Filter to only what SEA-LION needs
+      const filteredHistory = rawHistory.map((m: any) => ({
+        role: m.role,
+        content: m.content,
+      }));
 
-    const response = await fetch("http://localhost:8000/api/fillForm", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        form_schema: schema,
-        chat_history: filteredHistory,
-      }),
-    });
-
-    if (response.ok) {
-      const data = await response.json();
-      console.log("🤖 AI suggested values:", data);
-
-      const filled: Record<string, any> = {};
-      data.fields.forEach((f: any) => {
-        filled[f.name] = f.value !== "ASK_USER" ? f.value : "";
+      const response = await fetch("http://localhost:8000/api/fillForm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          form_schema: schema,
+          chat_history: filteredHistory,
+        }),
       });
-      setFormData(filled);
-    } else {
-      console.error("Failed to fill form with AI");
-    }
-  } catch (err) {
-    console.error("Error in AI fill:", err);
-  }
-};
 
+      if (response.ok) {
+        const data = await response.json();
+        console.log("🤖 AI suggested values:", data);
+
+        const filled: Record<string, any> = {};
+        data.fields.forEach((f: any) => {
+          if (f.value === "ASK_USER") {
+            filled[f.name] = "";
+            if (onAskClarification) {
+              // Trigger clarifying question into chat
+              onAskClarification(f.name, f.label || f.name.replace(/_/g, " "));
+            }
+          } else {
+            filled[f.name] = f.value;
+          }
+        });
+        setFormData(filled);
+      } else {
+        console.error("Failed to fill form with AI");
+      }
+    } catch (err) {
+      console.error("Error in AI fill:", err);
+    }
+  };
 
   return (
     <div className="p-4 border rounded-lg bg-white shadow">

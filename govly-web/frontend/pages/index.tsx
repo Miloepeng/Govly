@@ -284,7 +284,21 @@ export default function Home() {
         {formSchema && (
           <div className="p-4 border-t border-gray-300 overflow-y-auto max-h-[50vh]">
             <h3 className="text-md font-semibold mb-2 text-gray-800">Form Preview</h3>
-            <DynamicForm schema={formSchema} />
+            <DynamicForm
+  schema={formSchema}
+  onAskClarification={(field, label) => {
+    setMessages(prev => [
+      ...prev,
+      {
+        id: Date.now().toString(),
+        role: "assistant",
+        content: `Could you please provide your ${label}?`,
+        timestamp: new Date(),
+      }
+    ]);
+  }}
+/>
+
           </div>
         )}
       </div>
