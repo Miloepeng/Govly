@@ -158,6 +158,9 @@ export default function ChatMessage({
       const data = await response.json();
       console.log("✅ extractForm response:", data);
       if (setFormSchema) setFormSchema(data); // send schema to sidebar
+      if ((window as any).setCurrentFormSchema) {
+      (window as any).setCurrentFormSchema(data);
+      }
     } else {
       console.error('Failed to extract form');
     }

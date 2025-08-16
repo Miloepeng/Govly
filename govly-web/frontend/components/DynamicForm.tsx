@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 
 interface Field {
   name: string;
@@ -15,12 +15,42 @@ interface Schema {
 export default function DynamicForm({
   schema,
   onAskClarification,
+  externalUpdate,
+  formState,
 }: {
   schema: Schema;
   onAskClarification?: (fieldName: string, label: string) => void;
+  externalUpdate?: { field: string; value: string } | null;
+  formState?: Record<string, any>[];
 }) {
-  console.log("DynamicForm received schema:", schema); 
+  console.log("DynamicForm received schema:", schema);
   const [formData, setFormData] = useState<Record<string, any>>({});
+  // When parent sends formState, sync it in
+useEffect(() => {
+  if (formState && formState.length > 0) {
+    const mapped: Record<string, any> = {};
+    formState.forEach((f) => {
+      mapped[f.name] = f.value;
+    });
+    setFormData(mapped);
+  }
+}, [formState]);
+
+
+  // Apply external updates from parent (chat answers)
+  useEffect(() => {
+    if (externalUpdate) {
+      setFormData((prev) => ({
+        ...prev,
+        [externalUpdate.field]: externalUpdate.value,
+      }));
+    }
+  }, [externalUpdate]);
+
+  useEffect(() => {
+  if (formState) setFormData(formState);
+}, [formState]);
+
 
   if (!schema || !schema.fields || schema.fields.length === 0) {
     return <p className="text-gray-500">No form fields available.</p>;
@@ -86,7 +116,7 @@ export default function DynamicForm({
     <div className="p-4 border rounded-lg bg-white shadow">
       <h2 className="text-lg font-semibold mb-4">Dynamic Form</h2>
 
-      {/* NEW BUTTON */}
+      {/* Button to ask SEA-LION */}
       <button
         type="button"
         onClick={handleFillWithAI}

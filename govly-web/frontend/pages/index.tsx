@@ -23,6 +23,13 @@ export default function Home() {
   const [selectedLanguage, setSelectedLanguage] = useState('Vietnamese');
   const [formSchema, setFormSchema] = useState<any>(null);
 
+  const [pendingField, setPendingField] = useState<string | null>(null);
+  const [externalUpdate, setExternalUpdate] = useState<{ field: string; value: string } | null>(null);
+
+  const [currentFormSchema, setCurrentFormSchema] = useState<any>(null);
+  const [formState, setFormState] = useState<any[]>([]);
+
+
   const countries = [
     { name: 'Vietnam', flag: '🇻🇳' },
     { name: 'Thailand', flag: '🇹🇭' },
@@ -63,159 +70,199 @@ export default function Home() {
   localStorage.setItem("chatHistory", JSON.stringify(messages));
 }, [messages]);
 
-  const handleSendMessage = async () => {
-    if (!input.trim() || isLoading) return;
+const handleSendMessage = async () => {
+  if (!input.trim() || isLoading) return;
 
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      role: 'user',
-      content: input,
-      timestamp: new Date()
+  const userMessage: Message = {
+    id: Date.now().toString(),
+    role: 'user',
+    content: input,
+    timestamp: new Date()
+  };
+
+  setMessages(prev => [...prev, userMessage]);
+  setInput('');
+  setIsLoading(true);
+
+  // Set initial loading state for RAG operations
+  if (selectedButton === 'ragLink' || selectedButton === 'ragForm') {
+    setLoadingState('finding');
+  }
+
+  // Build conversation context from previous messages
+  const conversationContext = messages.map(msg => ({
+    role: msg.role,
+    content: msg.content
+  }));
+
+  // Add the current user message to the context
+  conversationContext.push({
+    role: 'user',
+    content: userMessage.content
+  });
+
+  try {
+    // Debug: Log what we're sending
+    const requestBody = {
+      message: userMessage.content,
+      conversationContext: conversationContext,
+      country: selectedCountry,
+      language: selectedLanguage,
+      settings: {
+        ...settings,
+        responseType: selectedButton // Pass the selected button type to the API
+      }
     };
-
-    setMessages(prev => [...prev, userMessage]);
-    setInput('');
-    setIsLoading(true);
-
-    // Set initial loading state for RAG operations
-    if (selectedButton === 'ragLink' || selectedButton === 'ragForm') {
-      setLoadingState('finding');
-    }
-
-    // Build conversation context from previous messages
-    const conversationContext = messages.map(msg => ({
-      role: msg.role,
-      content: msg.content
-    }));
-
-    // Add the current user message to the context
-    conversationContext.push({
-      role: 'user',
-      content: userMessage.content
+    console.log('DEBUG: Sending request with country:', selectedCountry, 'language:', selectedLanguage);
+    console.log('DEBUG: Full request body:', requestBody);
+    
+    const response = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(requestBody)
     });
 
-    try {
-      // Debug: Log what we're sending
-      const requestBody = {
-        message: userMessage.content,
-        conversationContext: conversationContext,
-        country: selectedCountry,
-        language: selectedLanguage,
-        settings: {
-          ...settings,
-          responseType: selectedButton // Pass the selected button type to the API
-        }
-      };
-      console.log('DEBUG: Sending request with country:', selectedCountry, 'language:', selectedLanguage);
-      console.log('DEBUG: Full request body:', requestBody);
+    if (response.ok) {
+      const data = await response.json();
       
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestBody)
-      });
-
-      if (response.ok) {
-        const data = await response.json();
+      // For RAG links/forms, get RAG results first, then generate AI response
+      if (selectedButton === 'ragLink' || selectedButton === 'ragForm') {
+        let ragResults: any[] = [];
+        let formResults: any[] = [];
         
-        // For RAG links/forms, get RAG results first, then generate AI response
-        if (selectedButton === 'ragLink' || selectedButton === 'ragForm') {
-          let ragResults = [];
-          let formResults = [];
-          
-          if (selectedButton === 'ragLink') {
-            // Get RAG link results first
-            const ragResponse = await fetch('/api/ragLink', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ query: userMessage.content })
-            });
-            if (ragResponse.ok) {
-              const ragData = await ragResponse.json();
-              ragResults = ragData.results;
-            }
-            // Show found state briefly, then change to generating
-            setLoadingState('found');
-            setTimeout(() => setLoadingState('generating'), 1000);
-          } else if (selectedButton === 'ragForm') {
-            // Get RAG form results first
-            const formResponse = await fetch('/api/ragForm', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ query: userMessage.content })
-            });
-            if (formResponse.ok) {
-              const formData = await formResponse.json();
-              formResults = formData.results;
-            }
-            // Show found state briefly, then change to generating
-            setLoadingState('found');
-            setTimeout(() => setLoadingState('generating'), 1000);
-          }
-          
-          // Now generate AI response with knowledge of the results
-          const aiRequestBody = {
-            message: userMessage.content,
-            conversationContext: conversationContext,
-            country: selectedCountry,
-            language: selectedLanguage,
-            settings: {
-              ...settings,
-              responseType: selectedButton,
-              ragResults: ragResults,
-              formResults: formResults
-            }
-          };
-          console.log('DEBUG: Sending RAG request with country:', selectedCountry, 'language:', selectedLanguage);
-          console.log('DEBUG: Full RAG request body:', aiRequestBody);
-          
-          const aiResponse = await fetch('/api/chat', {
+        if (selectedButton === 'ragLink') {
+          // Get RAG link results first
+          const ragResponse = await fetch('/api/ragLink', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(aiRequestBody)
+            body: JSON.stringify({ query: userMessage.content })
           });
-          
-          if (aiResponse.ok) {
-            const aiData = await aiResponse.json();
-            const assistantMessage: Message = {
-              id: (Date.now() + 1).toString(),
-              role: 'assistant',
-              content: aiData.response,
-              userQuery: userMessage.content,
-              timestamp: new Date(),
-              ragResults: selectedButton === 'ragLink' ? ragResults : undefined,
-              formResults: selectedButton === 'ragForm' ? formResults : undefined
-            };
-            setMessages(prev => [...prev, assistantMessage]);
+          if (ragResponse.ok) {
+            const ragData = await ragResponse.json();
+            ragResults = ragData.results;
           }
-        } else {
-          // Default response - no RAG/Form search
+          // Show found state briefly, then change to generating
+          setLoadingState('found');
+          setTimeout(() => setLoadingState('generating'), 1000);
+        } else if (selectedButton === 'ragForm') {
+  if (!currentFormSchema) {
+    // First time → search forms, then extract schema
+    const formResponse = await fetch('/api/ragForm', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query: userMessage.content })
+    });
+    if (formResponse.ok) {
+      const formData = await formResponse.json();
+      formResults = formData.results;
+
+      if (formResults.length > 0) {
+        // 👇 Call extractForm on the first result
+        const extractResponse = await fetch('/api/extractForm', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: formResults[0].url })
+        });
+
+        if (extractResponse.ok) {
+          const schemaData = await extractResponse.json();
+          setFormSchema(schemaData);
+          setCurrentFormSchema(schemaData);
+        }
+      }
+    }
+  } else {
+    // Subsequent replies → only update values
+    try {
+      const fillResponse = await fetch('/api/fillForm', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          form_schema: currentFormSchema,   // must match backend
+          chat_history: conversationContext
+        })
+      });
+
+      if (fillResponse.ok) {
+        const fillData = await fillResponse.json();
+        setFormState(fillData.fields);
+      }
+    } catch (err) {
+      console.error("fillForm error", err);
+    }
+  }
+
+
+          // Show found state briefly, then change to generating
+          setLoadingState('found');
+          setTimeout(() => setLoadingState('generating'), 1000);
+        }
+        
+        // Now generate AI response with knowledge of the results
+        const aiRequestBody = {
+          message: userMessage.content,
+          conversationContext: conversationContext,
+          country: selectedCountry,
+          language: selectedLanguage,
+          settings: {
+            ...settings,
+            responseType: selectedButton,
+            ragResults: ragResults,
+            formResults: formResults
+          }
+        };
+        console.log('DEBUG: Sending RAG request with country:', selectedCountry, 'language:', selectedLanguage);
+        console.log('DEBUG: Full RAG request body:', aiRequestBody);
+        
+        const aiResponse = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(aiRequestBody)
+        });
+        
+        if (aiResponse.ok) {
+          const aiData = await aiResponse.json();
           const assistantMessage: Message = {
             id: (Date.now() + 1).toString(),
             role: 'assistant',
-            content: data.response,
+            content: aiData.response,
             userQuery: userMessage.content,
-            timestamp: new Date()
+            timestamp: new Date(),
+            ragResults: selectedButton === 'ragLink' ? ragResults : undefined,
+            formResults: selectedButton === 'ragForm' ? formResults : undefined
           };
           setMessages(prev => [...prev, assistantMessage]);
         }
       } else {
-        throw new Error('Failed to get response');
+        // Default response - no RAG/Form search
+        const assistantMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          role: 'assistant',
+          content: data.response,
+          userQuery: userMessage.content,
+          timestamp: new Date()
+        };
+        setMessages(prev => [...prev, assistantMessage]);
       }
-    } catch (error) {
-      console.error('Error:', error);
-      const errorMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: 'Sorry, I encountered an error. Please try again.',
-        timestamp: new Date()
-      };
-      setMessages(prev => [...prev, errorMessage]);
-    } finally {
-      setIsLoading(false);
-      setLoadingState(null);
+    } else {
+      throw new Error('Failed to get response');
     }
-  };
+  } catch (error) {
+    console.error('Error:', error);
+    const errorMessage: Message = {
+      id: (Date.now() + 1).toString(),
+      role: 'assistant',
+      content: 'Sorry, I encountered an error. Please try again.',
+      timestamp: new Date()
+    };
+    setMessages(prev => [...prev, errorMessage]);
+  } finally {
+    setIsLoading(false);
+    setLoadingState(null);
+  }
+};
+
+
 
   const handleRAGSearch = async (messageId: string, userQuery: string) => {
     try {
@@ -286,7 +333,11 @@ export default function Home() {
             <h3 className="text-md font-semibold mb-2 text-gray-800">Form Preview</h3>
             <DynamicForm
   schema={formSchema}
-  onAskClarification={(field, label) => {
+  formState={formState}
+  externalUpdate={externalUpdate}
+  onAskClarification={(fieldName, label) => {
+    setPendingField(fieldName);
+
     setMessages(prev => [
       ...prev,
       {
@@ -298,6 +349,7 @@ export default function Home() {
     ]);
   }}
 />
+
 
           </div>
         )}
@@ -411,8 +463,12 @@ export default function Home() {
                   selectedButton={selectedButton}
                   onSelectedButtonChange={setSelectedButton}
                   isMostRecent={index === messages.length - 1}
-                  setFormSchema={setFormSchema}   // 🔥 added this line
+                  setFormSchema={(schema) => {
+                  setFormSchema(schema);
+                  setCurrentFormSchema(schema); // 🔥 make sure fillForm uses the right one
+                  }}
                   />
+
                   );
                   })}
 
