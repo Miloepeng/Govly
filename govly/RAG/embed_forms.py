@@ -45,8 +45,20 @@ FORMS = [
      (
         "VN",  # country
         "UBND xã/phường",  # agency
-        "Đơn xin xác nhận có nhà ở trên đất",  # title
-        "C:/Users/yeoyo/Downloads/homeconditionconfirmationrequest.pdf"  # public URL to the form
+        "Đơn xác nhận nhà ở hợp pháp",  # title
+        "../forms/don-de-nghi-xac-nhan-tinh-trang-nha-o-mau-1.pdf"  # local path
+    ),
+    (
+        "VN",
+        "UBND xã/phường",
+        "Đơn xin xác nhận chỗ ở hợp pháp",
+        "../forms/don-de-nghi-xac-nhan-tinh-trang-nha-o-mau-3.pdf"
+    ),
+    (
+        "VN",
+        "UBND xã/phường",
+        "Đơn xin xác nhận có nhà ở trên đất",
+        "../forms/Mẫu_đơn_xin_xác_nhận_có_đất_ở_hợp_pháp.pdf"
     )
 ]
 
