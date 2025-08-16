@@ -50,13 +50,13 @@ export default function Sidebar({ settings, onSettingsChange }: SidebarProps) {
               <span className="text-gray-800 text-sm">Chat</span>
             </a>
             <a
-              href="#"
-              className="flex items-center gap-3 px-3 py-3 rounded-xl border border-gray-200 bg-white hover:bg-gray-50"
+              href="/status"
+              className="flex items-center gap-3 px-3 py-3 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 hover:border-blue-300 hover:bg-blue-50 transition-colors"
             >
               <div className="w-10 h-10 flex items-center justify-center">
                 <FileTextIcon className="w-5 h-5 text-gray-700" />
               </div>
-              <span className="text-gray-800 text-sm">Status</span>
+              <span className="text-gray-800 text-sm">View Applications</span>
             </a>
           </nav>
 
@@ -84,8 +84,9 @@ export default function Sidebar({ settings, onSettingsChange }: SidebarProps) {
               <ChatBubbleIcon className="w-5 h-5 text-gray-700" />
             </a>
             <a
-              href="#"
-              className="w-10 h-10 flex items-center justify-center rounded-xl border border-gray-200 bg-white hover:bg-gray-50"
+              href="/status"
+              className="w-10 h-10 flex items-center justify-center rounded-xl border border-gray-200 bg-white hover:bg-gray-50 hover:border-blue-300 hover:bg-blue-50 transition-colors"
+              title="View Applications"
             >
               <FileTextIcon className="w-5 h-5 text-gray-700" />
             </a>

@@ -64,6 +64,11 @@ def send_to_sealion(cleaned_text: str) -> dict:
     - Checkbox/radio fields
     - Any field that requires user input
     
+    ⚠️ IMPORTANT: Each field should appear only ONCE in the output.
+    - If you see the same field name multiple times, include it only once
+    - Focus on unique, distinct fields
+    - Avoid repetitive or redundant field entries
+    
     Be thorough and don't miss any fields. Return ONLY valid JSON."""
     
     user_prompt = f"""Analyze this Vietnamese form text and extract ALL form fields in JSON format.
@@ -87,6 +92,11 @@ Return a comprehensive JSON object with this structure:
   ],
   "total_fields": "Total number of fields found"
 }}
+
+⚠️ CRITICAL: Ensure NO duplicate fields in the output.
+- Each field name should appear only once
+- If you see repeated field names, include only the first occurrence
+- Focus on unique, distinct form fields
 
 Be extremely thorough - extract every single field that requires input."""
     
