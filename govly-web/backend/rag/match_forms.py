@@ -47,6 +47,7 @@ def search_forms(query, top_k=5, country=None, agency=None):
             rpc_params["filter_country"] = country
         if agency:
             rpc_params["filter_agency"] = agency
+
         response = supabase.rpc("match_forms", rpc_params).execute()
         
         if not response.data:
@@ -54,7 +55,19 @@ def search_forms(query, top_k=5, country=None, agency=None):
             return []
             
         print(f"✅ Found {len(response.data)} matching forms")
-        return response.data
+
+        # 🔥 Rewrite URLs so they point to FastAPI's static /forms mount
+        rewritten = []
+        for form in response.data:
+            form_copy = form.copy()
+            if "url" in form_copy and form_copy["url"]:
+                # Extract just the filename from DB path
+                filename = os.path.basename(form_copy["url"])
+                # Build HTTP URL to your static /forms endpoint
+                form_copy["url"] = f"http://localhost:8000/forms/{filename}"
+            rewritten.append(form_copy)
+
+        return rewritten
     except Exception as e:
         print(f"❌ Error in form search: {e}")
         return []

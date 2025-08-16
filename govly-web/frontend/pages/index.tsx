@@ -1,10 +1,11 @@
 import { useState, useRef, useEffect } from 'react';
-import { Bot, Sparkles, Search, FileText, Check, Flag } from 'lucide-react';
+import { Bot, Sparkles, Search, FileText, Check } from 'lucide-react';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { GearIcon, PaperPlaneIcon } from '@radix-ui/react-icons';
 import ChatMessage from '../components/ChatMessage';
 import Sidebar from '../components/Sidebar';
 import { Message } from '../types/chat';
+import DynamicForm from '../components/DynamicForm';
 
 export default function Home() {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -15,13 +16,13 @@ export default function Home() {
   const [settings, setSettings] = useState({
     maxTokens: 300,
     temperature: 0.7,
-    thinkingMode: 'off'
+    thinkingMode: 'off',
   });
-  
+
   const [selectedCountry, setSelectedCountry] = useState('Vietnam');
   const [selectedLanguage, setSelectedLanguage] = useState('Vietnamese');
-  
-  // List of Southeast Asian countries with flags
+  const [formSchema, setFormSchema] = useState<any>(null);
+
   const countries = [
     { name: 'Vietnam', flag: '🇻🇳' },
     { name: 'Thailand', flag: '🇹🇭' },
@@ -33,10 +34,9 @@ export default function Home() {
     { name: 'Cambodia', flag: '🇰🇭' },
     { name: 'Laos', flag: '🇱🇦' },
     { name: 'Brunei', flag: '🇧🇳' },
-    { name: 'East Timor', flag: '🇹🇱' }
+    { name: 'East Timor', flag: '🇹🇱' },
   ];
-  
-  // List of Southeast Asian languages
+
   const languages = [
     { name: 'Vietnamese', code: 'vi', flag: '🇻🇳' },
     { name: 'Thai', code: 'th', flag: '🇹🇭' },
@@ -47,12 +47,12 @@ export default function Home() {
     { name: 'Burmese', code: 'my', flag: '🇲🇲' },
     { name: 'Khmer', code: 'km', flag: '🇰🇭' },
     { name: 'Lao', code: 'lo', flag: '🇱🇦' },
-    { name: 'Chinese', code: 'zh', flag: '🇨🇳' }
+    { name: 'Chinese', code: 'zh', flag: '🇨🇳' },
   ];
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
   useEffect(() => {
@@ -270,10 +270,23 @@ export default function Home() {
 
   return (
     <div className="flex h-screen bg-white">
-      <Sidebar 
-        settings={settings} 
-        onSettingsChange={setSettings}
-      />
+      <div className="flex flex-col w-80 bg-gray-100 border-r border-gray-200">
+        <Sidebar 
+          settings={settings} 
+          onSettingsChange={setSettings}
+        />
+
+        {/* ✅ Dynamic Form appended below Sidebar */}
+        {formSchema && (
+          <div className="p-4 border-t border-gray-300 overflow-y-auto max-h-[50vh]">
+            <h3 className="text-md font-semibold mb-2 text-gray-800">Form Preview</h3>
+            <DynamicForm schema={formSchema} />
+          </div>
+        )}
+      </div>
+
+      
+      
       
       <div className="flex-1 flex flex-col">
         {/* Header */}
@@ -371,19 +384,20 @@ export default function Home() {
             ) : (
               <>
                 {messages.map((message, index) => {
-                  // Find the user query from the previous user message
                   const userQuery = index > 0 ? messages[index - 1].content : undefined;
-                  
+  
                   return (
-                    <ChatMessage
-                      key={message.id}
-                      message={message}
-                      selectedButton={selectedButton}
-                      onSelectedButtonChange={setSelectedButton}
-                      isMostRecent={index === messages.length - 1}
-                    />
+                  <ChatMessage
+                  key={message.id}
+                  message={message}
+                  selectedButton={selectedButton}
+                  onSelectedButtonChange={setSelectedButton}
+                  isMostRecent={index === messages.length - 1}
+                  setFormSchema={setFormSchema}   // 🔥 added this line
+                  />
                   );
-                })}
+                  })}
+
                 
                 {isLoading && (
                   <div className="flex justify-start mb-4">
