@@ -2,6 +2,11 @@
 
 A comprehensive AI-powered government services advisor that intelligently routes user queries, provides relevant policy documents and forms, and tracks application progress through a conversational interface. Created by Shao Zhi, Yi Ting, Yong Sheng from NUS.
 
+## 🎥 Demo Video
+
+[![Govly Demo](https://img.youtube.com/vi/S2ZD_27dWmw/maxresdefault.jpg)](https://youtu.be/S2ZD_27dWmw)
+
+
 ## 🚀 Quick Start
 
 ### Prerequisites
