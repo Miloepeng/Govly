@@ -21,7 +21,23 @@ print("✅ DEBUG: RAG imports successful")
 
 # Load environment variables
 from dotenv import load_dotenv
-load_dotenv()
+import os
+
+# Try to load .env from multiple possible locations
+env_paths = [
+    ".env",  # Current directory
+    "../.env",  # Parent directory (root of project)
+    "../../.env",  # Two levels up
+    os.path.join(os.path.dirname(__file__), "../.env"),  # Relative to this file
+    os.path.join(os.path.dirname(__file__), "../../.env"),  # Two levels up from this file
+]
+
+for env_path in env_paths:
+    if load_dotenv(env_path):
+        print(f"✅ Loaded environment from: {env_path}")
+        break
+else:
+    print("⚠️  No .env file found in any expected location")
 
 from fastapi.staticfiles import StaticFiles
 app = FastAPI(title="Govly API", version="1.0.0")
@@ -55,6 +71,11 @@ async def validation_exception_handler(request, exc):
         status_code=422,
         content={"detail": f"Validation error: {exc.errors()}"}
     )
+
+# Health check endpoint for Docker
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy", "service": "Govly Backend API"}
 
 # ---------------- Models ----------------
 from typing import Optional

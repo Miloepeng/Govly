@@ -6,15 +6,68 @@ A comprehensive AI-powered government services advisor that intelligently routes
 
 [![Govly Demo](https://img.youtube.com/vi/S2ZD_27dWmw/maxresdefault.jpg)](https://youtu.be/S2ZD_27dWmw)
 
+**📁 [Alternative: Google Drive Demo](https://drive.google.com/file/d/1k2VpKV7fFUvWk5fNQ5At4hNW2S-Q-07P/view?usp=sharing)**
+
+*If you can't access YouTube, use the Google Drive link above*
+
 
 ## 🚀 Quick Start
 
-### Prerequisites
+### 🐳 **Run with Docker (Recommended)**
+
+1. **Prerequisites:**
+   - **Docker Desktop** installed and running ([Get Docker](https://www.docker.com/products/docker-desktop/))
+   - **Git** installed ([Get Git](https://git-scm.com/))
+
+2. **Clone and Setup:**
+   ```bash
+   # Clone the repository
+   git clone <your-repo-url>
+   cd Govly
+
+   # Copy environment template
+   cp env.example .env
+
+   # Get API keys from @ShaoZhi21 on Telegram and add to .env
+   ```
+
+3. **Build and Run:**
+   ```bash
+   # Build and start all services
+   docker-compose up -d
+
+   # Wait for services to start (takes ~5 minutes first time)
+   # Backend downloads AI models (2.27GB+)
+   # Frontend builds Next.js app
+   ```
+
+4. **Access the App:**
+   - Frontend: http://localhost:3000
+   - Backend API: http://localhost:8000
+
+5. **View Logs (Optional):**
+   ```bash
+   # See what's happening
+   docker-compose logs -f
+   ```
+
+6. **Stop the App:**
+   ```bash
+   # When you're done
+   docker-compose down
+   ```
+
+### 🛠️ **Manual Setup (Alternative)**
+#### Prerequisites
 - **Node.js 18+** (Download from [nodejs.org](https://nodejs.org/))
 - **Python 3.8+** (Download from [python.org](https://python.org/))
 - **Git** (Download from [git-scm.com](https://git-scm.com/))
 - **Supabase account** with pgvector extension enabled
 - **SEA-LION API key** (Contact @ShaoZhi21 on Telegram)
+
+## 🛠️ **Manual Setup (Alternative)**
+
+If you can't setup Docker, you can run the application manually:
 
 ### 🐍 Backend Setup
 
