@@ -18,7 +18,7 @@ from rag.match_forms import search_forms
 from tesseract_extractor import extract_pdf_to_text, clean_ocr_text, send_to_sealion
 
 # Import LangChain components
-from langchain_components import get_chat_chain
+from langchain_components import get_chat_chain, get_intent_chain
 
 print("✅ DEBUG: RAG imports successful")
 
@@ -113,13 +113,13 @@ class AgencyDetectionRequest(BaseModel):
 @app.post("/api/chat")
 async def chat(request: ChatRequest):
     try:
-        # Get LangChain chat handler
+        # Get singleton LangChain chat handler instance
         chat_chain = get_chat_chain()
         
         print(f"DEBUG: General chat - country: {request.country}, language: {request.language}")
         print(f"DEBUG: Selected agency: {request.selectedAgency}")
         
-        # Process chat using LangChain
+        # Process chat through LangChain pipeline (prompt -> llm -> parser)
         result = chat_chain.chat(
             message=request.message,
             country=request.country,
@@ -129,6 +129,7 @@ async def chat(request: ChatRequest):
             settings=request.settings
         )
         
+        # Return only the response text (follow_up_questions handled by frontend)
         return {"response": result["response"]}
         
     except Exception as e:
@@ -289,128 +290,30 @@ async def smart_chat(request: ChatRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# ---------------- LLM Intent Detection ----------------
+# ---------------- LLM Intent Detection (LangChain version) ----------------
 async def detect_intent_with_llm(message: str, country: str, language: str) -> tuple[str, bool, list, str]:
-    """Use LLM to detect user intent and determine if they need agency-specific help"""
+    """Use LangChain to detect user intent and determine routing needs"""
     print(f"DEBUG: ===== LLM INTENT DETECTION START =====")
     print(f"DEBUG: Analyzing message: {message}")
     print(f"DEBUG: Country: {country}, Language: {language}")
+    
     try:
-        api_key = os.getenv("SEA_LION_API_KEY")
-        if not api_key:
-            print(f"DEBUG: No API key found")
-            return None, False, []
+        # Get LangChain intent detection handler
+        intent_chain = get_intent_chain()
         
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json"
-        }
+        # Process intent detection through LangChain pipeline
+        result = intent_chain.detect_intent(message, country, language)
         
-        system_prompt = f"""You are an AI assistant that analyzes user messages to determine their intent and routing needs.
-
-Analyze the user's message and determine:
-1. What category of government service they need (if any)
-2. Whether they need specialized help from a government agency
-3. Suggest relevant government agencies for their country
-4. Whether they need documents/policies (ragLink) or forms (ragForm)
-
-IMPORTANT ROUTING RULES:
-- If user asks for "policies", "documents", "regulations", "laws", "rules", "guidelines", "information", "show me", "find", "search", "what are the", "how to", "requirements" -> route to ragLink
-- If user asks for "forms", "applications", "appeals", "submit", "fill out", "download", "apply for", "request", "petition", "complaint form" -> route to ragForm
-- If user needs agency help but doesn't specify documents/forms -> route to agency selection
-- If user just wants general advice or has vague questions -> route to general chat for more probing questions
-
-ROUTING DECISIONS:
-- Vague questions like "I need help", "What should I do?", "I have a problem" -> route to general chat (AI will ask probing questions)
-- Specific requests for documents/forms -> route to ragLink/ragForm
-- Agency-specific questions -> route to agency selection
-- Complex situations needing clarification -> route to general chat for detailed questioning
-
-Available categories:
-- housing: Housing, accommodation, real estate, construction
-- land: Land use, property, planning, permits, development
-- immigration: Passports, visas, citizenship, residence permits
-- employment: Work, jobs, labor laws, contracts, permits
-- transport: Driving licenses, vehicle registration, public transport
-- environment: Environmental protection, waste management, pollution
-- business: Business registration, taxes, investment, trade
-- education: Schools, universities, training, courses
-
-Respond with ONLY a JSON object in this exact format:
-{{
-    "category": "category_name" or null,
-    "needs_agency": true/false,
-    "suggested_agencies": ["Agency 1", "Agency 2"],
-    "response_type": "ragLink" or "ragForm" or "agency" or "general",
-    "reasoning": "Brief explanation of your decision"
-}}
-If the user doesn't need specialized agency help, set category to null, needs_agency to false, and suggested_agencies to empty array.
-Suggest 2-3 relevant government agencies for their specific country and category.
-
-Examples:
-- "show me housing policies" -> {{"response_type": "ragLink", "category": "housing", ...}}
-- "I want to submit a form" -> {{"response_type": "ragForm", "category": null, ...}}
-- "which agency handles immigration?" -> {{"response_type": "agency", "category": "immigration", ...}}
-- "what are the requirements?" -> {{"response_type": "ragLink", "category": null, ...}}
-- "I need help" -> {{"response_type": "general", "category": null, ...}} (AI will ask probing questions)
-- "I have a problem" -> {{"response_type": "general", "category": null, ...}} (AI will ask probing questions)"""
-
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": message}
-        ]
+        category, needs_agency, suggested_agencies, response_type = result
         
-        payload = {
-            "max_completion_tokens": 150,
-            "messages": messages,
-            "model": "aisingapore/Llama-SEA-LION-v3-70B-IT",
-            "temperature": 0.1,  # Low temperature for consistent JSON output
-        }
+        print(f"DEBUG: LLM Intent Detection - Category: {category}, Needs Agency: {needs_agency}")
+        print(f"DEBUG: LLM Suggested Agencies: {suggested_agencies}")
+        print(f"DEBUG: LLM Response Type: {response_type}")
+        print(f"DEBUG: LLM Intent Detection SUCCESS")
+        print(f"DEBUG: ===== LLM INTENT DETECTION END =====")
         
-        response = requests.post(
-            "https://api.sea-lion.ai/v1/chat/completions",
-            headers=headers,
-            json=payload,
-            timeout=30
-        )
+        return result
         
-        if response.status_code == 200:
-            response_data = response.json()
-            response_text = response_data["choices"][0]["message"]["content"].strip()
-            
-            try:
-                # Parse JSON response - handle markdown code blocks
-                import json
-                import re
-                
-                # Extract JSON from markdown code blocks if present
-                json_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', response_text, re.DOTALL)
-                if json_match:
-                    json_content = json_match.group(1)
-                else:
-                    json_content = response_text
-                
-                intent_data = json.loads(json_content)
-                category = intent_data.get("category")
-                needs_agency = intent_data.get("needs_agency", False)
-                
-                print(f"DEBUG: LLM Intent Detection - Category: {category}, Needs Agency: {needs_agency}")
-                print(f"DEBUG: LLM Reasoning: {intent_data.get('reasoning', 'No reasoning provided')}")
-                print(f"DEBUG: LLM Suggested Agencies: {intent_data.get('suggested_agencies', [])}")
-                
-                print(f"DEBUG: LLM Intent Detection SUCCESS")
-                print(f"DEBUG: ===== LLM INTENT DETECTION END =====")
-                return category, needs_agency, intent_data.get('suggested_agencies', []), intent_data.get('response_type', 'general')
-            except json.JSONDecodeError as e:
-                print(f"DEBUG: Failed to parse LLM response as JSON: {response_text}")
-                print(f"DEBUG: JSON Parse Error: {str(e)}")
-                print(f"DEBUG: ===== LLM INTENT DETECTION END (ERROR) =====")
-                return None, False, [], "general"
-        else:
-            print(f"DEBUG: LLM API error: {response.status_code}")
-            print(f"DEBUG: ===== LLM INTENT DETECTION END (ERROR) =====")
-            return None, False, [], "general"
-            
     except Exception as e:
         print(f"DEBUG: Intent detection error: {str(e)}")
         print(f"DEBUG: ===== LLM INTENT DETECTION END (ERROR) =====")
