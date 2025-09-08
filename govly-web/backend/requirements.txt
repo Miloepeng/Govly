@@ -1,7 +1,7 @@
 fastapi==0.115.6
 uvicorn[standard]==0.32.1
 python-dotenv==1.0.0
-requests==2.31.0
+requests>=2.32.5
 pydantic==2.10.4
 supabase==2.0.2
 pytesseract==0.3.10
@@ -13,6 +13,6 @@ transformers==4.35.0
 numpy<2.0.0
 
 # LangChain - use compatible versions
-langchain==0.1.0
-langchain-core>=0.1.7
-langchain-community==0.0.10 
+langchain>=0.3.27
+langchain-core>=0.3.75
+langchain-community>=0.3.29 

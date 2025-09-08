@@ -17,8 +17,8 @@ from rag.query import search_chunks, supabase
 from rag.match_forms import search_forms
 from tesseract_extractor import extract_pdf_to_text, clean_ocr_text, send_to_sealion
 
-# Import LangChain components
-from langchain_components import get_chat_chain, get_intent_chain
+# Import LangChain components from organized structure
+from utils.chain_utils import get_chat_chain, get_intent_chain
 
 print("✅ DEBUG: RAG imports successful")
 
