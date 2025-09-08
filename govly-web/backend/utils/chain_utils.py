@@ -5,11 +5,13 @@ Chain utility functions
 import os
 from chains.chat_chain import ChatChain
 from chains.intent_chain import IntentDetectionChain
+from chains.agency_chain import AgencySelectionChain
 
 
 # Global chain instances - singleton pattern for efficiency
 _chat_chain = None
 _intent_chain = None
+_agency_chain = None
 
 
 def get_chat_chain() -> ChatChain:
@@ -32,3 +34,14 @@ def get_intent_chain() -> IntentDetectionChain:
             raise ValueError("SEA_LION_API_KEY not found")
         _intent_chain = IntentDetectionChain(api_key)
     return _intent_chain
+
+
+def get_agency_chain() -> AgencySelectionChain:
+    """Get or create the global agency selection chain instance - lazy initialization"""
+    global _agency_chain
+    if _agency_chain is None:
+        api_key = os.getenv("SEA_LION_API_KEY")
+        if not api_key:
+            raise ValueError("SEA_LION_API_KEY not found")
+        _agency_chain = AgencySelectionChain(api_key)
+    return _agency_chain

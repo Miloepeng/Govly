@@ -18,7 +18,7 @@ from rag.match_forms import search_forms
 from tesseract_extractor import extract_pdf_to_text, clean_ocr_text, send_to_sealion
 
 # Import LangChain components from organized structure
-from utils.chain_utils import get_chat_chain, get_intent_chain
+from utils.chain_utils import get_chat_chain, get_intent_chain, get_agency_chain
 
 print("✅ DEBUG: RAG imports successful")
 
@@ -320,94 +320,42 @@ async def detect_intent_with_llm(message: str, country: str, language: str) -> t
         return None, False, [], "general"
 
 
-# ---------------- Choose Agency endpoint ----------------
+# ---------------- Choose Agency endpoint (LangChain version) ----------------
 async def choose_agency(request: ChatRequest, detected_category: str, suggested_agencies: list):
-    """Handle agency choice routing"""
+    """Handle agency choice routing using LangChain"""
     try:
-        api_key = os.getenv("SEA_LION_API_KEY")
-        if not api_key:
-            raise HTTPException(status_code=500, detail="SEA_LION_API_KEY not found")
+        # Get LangChain agency selection handler
+        agency_chain = get_agency_chain()
         
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json"
-        }
+        print(f"DEBUG: Agency selection - category: {detected_category}, agencies: {suggested_agencies}")
         
-        country = request.country
-        language = request.language
-        detected_category_name = detected_category.replace("_", " ").title() if detected_category else "relevant"
-        category_agencies = suggested_agencies
-        
-        system_prompt = f"""You are a government agency advisor from {country}, responding in {language}. Your main job is to advise people on relevant policies, laws, actions to take, and what kind of applications or appeals they can sign up for.
-
-The user's question appears to need specialized help from a {detected_category_name} government agency in {country}. 
-
-Respond by:
-1) Giving a helpful general answer to their question
-2) Explaining that you can connect them to a specialized {detected_category_name} agency for more detailed help
-3) Suggesting the most relevant agency from {country} based on their query
-4) Asking if they'd like to be connected to that agency
-
-Available {detected_category_name} agencies in {country}:
-{chr(10).join([f"- {agency}" for agency in category_agencies])}
-
-IMPORTANT: Before connecting them to the agency, ask 1-2 probing questions to better understand their specific situation:
-- Ask about their timeline, documents, or specific circumstances
-- Gather key details that will help the agency provide better assistance
-- Make sure you have enough context before the handoff
-
-End your response with: "Would you like me to connect you to [Agency Name] for specialized assistance?" But first, ask 1-2 specific questions to gather more context about their situation."""
-
-        messages = [{"role": "system", "content": system_prompt}]
-        if request.conversationContext:
-            for msg in request.conversationContext:
-                if msg.get("role") in ["user", "assistant"] and msg.get("content"):
-                    messages.append({
-                        "role": msg["role"],
-                        "content": msg["content"]
-                    })
-        else:
-            messages.append({
-                "role": "user",
-                "content": request.message
-            })
-        
-        payload = {
-            "max_completion_tokens": request.settings.get("maxTokens", 150),
-            "messages": messages,
-            "model": "aisingapore/Llama-SEA-LION-v3-70B-IT",
-            "temperature": request.settings.get("temperature", 0.7),
-            "thinking_mode": request.settings.get("thinkingMode", "off")
-        }
-        
-        response = requests.post(
-            "https://api.sea-lion.ai/v1/chat/completions",
-            headers=headers,
-            json=payload,
-            timeout=60
+        # Process agency selection through LangChain pipeline
+        result = agency_chain.select_agency(
+            message=request.message,
+            country=request.country,
+            language=request.language,
+            category=detected_category,
+            suggested_agencies=suggested_agencies,
+            conversation_context=request.conversationContext,
+            settings=request.settings
         )
         
-        if response.status_code == 200:
-            response_data = response.json()
-            response_text = response_data["choices"][0]["message"]["content"]
-            
-            # Add agency detection info to help frontend
-            response_payload = {
-                "response": response_text,
-                "agency_detection": {
-                    "needs_agency": True,
-                    "should_offer_agency": True,
-                    "suggested_agency": category_agencies[0] if category_agencies else None,
-                    "available_agencies": category_agencies,
-                    "category": detected_category
-                }
+        # Add agency detection info to help frontend
+        response_payload = {
+            "response": result["response"],
+            "agency_detection": {
+                "needs_agency": True,
+                "should_offer_agency": True,
+                "suggested_agency": result["suggested_agency"],
+                "available_agencies": result["available_agencies"],
+                "category": result["category"]
             }
-            
-            return response_payload
-        else:
-            raise HTTPException(status_code=response.status_code, detail="SEA-LION API error")
-            
+        }
+        
+        return response_payload
+        
     except Exception as e:
+        print(f"💥 Exception in choose_agency: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
