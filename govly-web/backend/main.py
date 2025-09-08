@@ -17,6 +17,9 @@ from rag.query import search_chunks, supabase
 from rag.match_forms import search_forms
 from tesseract_extractor import extract_pdf_to_text, clean_ocr_text, send_to_sealion
 
+# Import LangChain components
+from langchain_components import get_chat_chain
+
 print("✅ DEBUG: RAG imports successful")
 
 # Load environment variables
@@ -106,92 +109,30 @@ class AgencyDetectionRequest(BaseModel):
     country: str
     conversationContext: list = []
 
-# ---------------- Chat endpoint ----------------
+# ---------------- Chat endpoint (LangChain version) ----------------
 @app.post("/api/chat")
 async def chat(request: ChatRequest):
     try:
-        api_key = os.getenv("SEA_LION_API_KEY")
-        if not api_key:
-            raise HTTPException(status_code=500, detail="SEA_LION_API_KEY not found")
+        # Get LangChain chat handler
+        chat_chain = get_chat_chain()
         
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json"
-        }
+        print(f"DEBUG: General chat - country: {request.country}, language: {request.language}")
+        print(f"DEBUG: Selected agency: {request.selectedAgency}")
         
-        # Simple general enquiry - no routing logic
-        country = request.country
-        language = request.language
-        selected_agency = request.selectedAgency
-        
-        print(f"DEBUG: General chat - country: {country}, language: {language}")
-        print(f"DEBUG: Selected agency: {selected_agency}")
-        
-        # Enhanced system prompt for general enquiries with proactive questioning
-        agency_context = f" You are specifically representing the {selected_agency} agency." if selected_agency else ""
-        
-        system_prompt = f"""You are a government agency advisor from {country}, responding in {language}.{agency_context} Your main job is to advise people on relevant policies, laws, actions to take, and what kind of applications or appeals they can sign up for.
-
-IMPORTANT: Be proactive and inquisitive! Don't just answer the surface question - dig deeper to understand the user's real problem and needs.
-
-ALWAYS ask follow-up questions to gather more information:
-- If they mention a problem, ask about specific details, timeline, location
-- If they ask about requirements, ask about their specific situation
-- If they want to apply for something, ask about their eligibility, documents, timeline
-- If they have a complaint, ask about when it happened, who was involved, what they've tried
-- If they need help with forms, ask about their specific circumstances
-
-Examples of good follow-up questions:
-- "When did this issue occur?"
-- "What specific documents do you have?"
-- "Have you tried contacting anyone else about this?"
-- "What is your current situation regarding [topic]?"
-- "Do you have any supporting evidence or documentation?"
-- "What is your timeline for resolving this?"
-
-Give informative, helpful answers as a government representative. Be direct, factual, and authoritative. Consider the full conversation context and provide country-specific information when relevant.
-
-End your response with 1-2 specific follow-up questions to better understand their situation and provide more targeted help."""
-
-        # Build messages array with conversation context
-        messages = [{"role": "system", "content": system_prompt}]
-        if request.conversationContext:
-            for msg in request.conversationContext:
-                if msg.get("role") in ["user", "assistant"] and msg.get("content"):
-                    messages.append({
-                        "role": msg["role"],
-                        "content": msg["content"]
-                    })
-        else:
-            messages.append({
-                "role": "user",
-                "content": request.message
-            })
-        
-        payload = {
-            "max_completion_tokens": request.settings.get("maxTokens", 150),
-            "messages": messages,
-            "model": "aisingapore/Llama-SEA-LION-v3-70B-IT",
-            "temperature": request.settings.get("temperature", 0.7),
-            "thinking_mode": request.settings.get("thinkingMode", "off")
-        }
-        
-        response = requests.post(
-            "https://api.sea-lion.ai/v1/chat/completions",
-            headers=headers,
-            json=payload,
-            timeout=60
+        # Process chat using LangChain
+        result = chat_chain.chat(
+            message=request.message,
+            country=request.country,
+            language=request.language,
+            selected_agency=request.selectedAgency,
+            conversation_context=request.conversationContext,
+            settings=request.settings
         )
         
-        if response.status_code == 200:
-            response_data = response.json()
-            response_text = response_data["choices"][0]["message"]["content"]
-            
-            return {"response": response_text}
-        else:
-            raise HTTPException(status_code=response.status_code, detail="SEA-LION API error")
-            
+        return {"response": result["response"]}
+        
     except Exception as e:
+        print(f"💥 Exception in chat: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

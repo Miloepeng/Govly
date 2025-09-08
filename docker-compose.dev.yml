@@ -1,0 +1,48 @@
+services:
+  backend:
+    build:
+      context: ./govly-web/backend
+      dockerfile: Dockerfile.dev
+    ports:
+      - "8000:8000"
+    environment:
+      - PORT=8000
+      - SEA_LION_API_KEY=${SEA_LION_API_KEY}
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_KEY=${SUPABASE_KEY}
+    volumes:
+      # Mount source code for hot reloading
+      - ./govly-web/backend:/app
+      # Exclude node_modules and other build artifacts
+      - /app/__pycache__
+      - /app/.pytest_cache
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  frontend:
+    build:
+      context: ./govly-web/frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+      - NODE_ENV=development
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+networks:
+  default:
+    name: govly-network

@@ -10,4 +10,9 @@ Pillow==10.0.1
 sentence-transformers==2.2.2
 torch==2.0.1
 transformers==4.35.0
-numpy<2.0.0 
+numpy<2.0.0
+
+# LangChain - use compatible versions
+langchain==0.1.0
+langchain-core>=0.1.7
+langchain-community==0.0.10 

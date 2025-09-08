@@ -35,17 +35,23 @@ ENV/
 .DS_Store
 Thumbs.db
 
-# Logs
-*.log
-
 # Git
 .git/
 .gitignore
 
 # Docker
-Dockerfile
-.dockerignore
+Dockerfile*
+docker-compose*.yml
 
-# Environment files
+# Logs
+*.log
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Environment
 .env
 .env.local
+.env.*.local
