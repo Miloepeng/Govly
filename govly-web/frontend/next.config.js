@@ -7,7 +7,7 @@ const nextConfig = {
     return [
       {
         source: '/api/:path*',
-        destination: 'http://backend:8000/api/:path*',  // Force use Docker service name
+        destination: 'http://localhost:8000/api/:path*',  // Local development
       },
     ]
   },

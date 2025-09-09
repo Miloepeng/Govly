@@ -16,6 +16,9 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
+# Use Docker-specific config for backend connection
+RUN cp next.config.docker.js next.config.js
+
 # Build the application
 RUN npm run build
 

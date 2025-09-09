@@ -15,6 +15,7 @@ sys.path.insert(0, current_dir)
 # Import your existing RAG functionality
 from rag.query import search_chunks, supabase
 from rag.match_forms import search_forms
+from rag.llamaindex_retriever import search_links_llamaindex, search_forms_llamaindex
 from tesseract_extractor import extract_pdf_to_text, clean_ocr_text, send_to_sealion
 
 # Import LangChain components from organized structure
@@ -363,7 +364,8 @@ async def choose_agency(request: ChatRequest, detected_category: str, suggested_
 @app.post("/api/ragLink")
 async def rag_link_search(request: RAGRequest):
     try:
-        results = search_chunks(request.query, top_k=3)
+        # Prefer LlamaIndex when enabled; module falls back automatically
+        results = search_links_llamaindex(request.query, top_k=3, country=request.country)
         return {"results": results}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -490,7 +492,8 @@ If the user doesn't need specialized agency help, set needs_agency to false and 
 @app.post("/api/ragForm")
 async def rag_form_search(request: FormRequest):
     try:
-        results = search_forms(request.query, top_k=3)
+        # Prefer LlamaIndex when enabled; module falls back automatically
+        results = search_forms_llamaindex(request.query, top_k=3, country=request.country)
         return {"results": results}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

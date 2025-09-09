@@ -12,9 +12,6 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Add LangChain dependencies
-RUN pip install python-dotenv langchain langchain-core langchain-community
-
 # Copy application code
 COPY . .
 

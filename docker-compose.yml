@@ -10,6 +10,9 @@ services:
       - SEA_LION_API_KEY=${SEA_LION_API_KEY}
       - SUPABASE_URL=${SUPABASE_URL}
       - SUPABASE_KEY=${SUPABASE_KEY}
+      - USE_LLAMA_INDEX=${USE_LLAMA_INDEX:-true}
+      - SUPABASE_CHUNKS_TABLE=${SUPABASE_CHUNKS_TABLE:-chunks}
+      - SUPABASE_FORMS_TABLE=${SUPABASE_FORMS_TABLE:-forms}
     volumes:
       - ./govly-web/backend/forms:/app/forms
     restart: unless-stopped
