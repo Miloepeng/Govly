@@ -19,32 +19,56 @@ import re
 load_dotenv()
 
 def clean_ocr_text(text: str) -> str:
-    """Improved text cleaning that preserves form field indicators"""
+    """Improved text cleaning that preserves form field indicators and Vietnamese text"""
     
-    # Remove random characters and noise (but keep form field patterns)
-    cleaned = re.sub(r'[0-9]{3,}', '', text)  # Remove very long numbers
-    cleaned = re.sub(r'[<>]{3,}', '', cleaned)  # Remove multiple < or >
+    # Remove common OCR noise patterns
+    cleaned = re.sub(r'[0-9]{5,}', '', text)  # Remove very long numbers
+    cleaned = re.sub(r'[<>]{2,}', '', cleaned)  # Remove multiple < or >
+    cleaned = re.sub(r'([a-zA-Z])\1{3,}', '.', cleaned)  # Replace repeated chars with dots
+    cleaned = re.sub(r'[\.]{3,}', '...', cleaned)  # Normalize multiple dots
+    cleaned = re.sub(r'\s{3,}', ' ', cleaned)  # Normalize multiple spaces
     
-    # Keep Vietnamese text and form field patterns
+    # Split into lines and process each line
     lines = cleaned.split('\n')
     clean_lines = []
+    current_section = []
     
     for line in lines:
         line = line.strip()
-        if not line:
+        if not line or len(line) < 3:  # Skip empty or very short lines
+            if current_section:  # Save accumulated section
+                clean_lines.extend(current_section)
+                current_section = []
             continue
+        
+        # Keep lines with Vietnamese text or form field indicators
+        if (re.search(r'[ÀÁẠẢÃÂẦẤẬẨẪĂẰẮẶẲẴÈÉẸẺẼÊỀẾỆỂỄÌÍỊỈĨÒÓỌỎÕÔỒỐỘỔỖƠỜỚỢỞỠÙÚỤỦŨƯỪỨỰỬỮỲÝỴỶỸĐ]', line) or
+            re.search(r'(Họ và tên|Sinh năm|Sinh ngày|Giấy CCCD|CMND|Ngày cấp|Nơi cấp|Hộ khẩu|Chỗ ở|Nơi ở|Địa chỉ|Đơn|Xác nhận|UBND|Ngày|Tháng|Năm|Diện tích|Chiều dài|Chiều rộng|Phía|giáp|Tôi là|Tôi làm|Kính gửi|Kính đề nghị|Cam đoan|Chân thành|Xin chịu|Số|Tên|Địa điểm|Thời gian|Lý do|Mục đích|Nghề nghiệp|Điện thoại|Email|Chức vụ|Nơi sinh|Quốc tịch|Dân tộc|Tôn giáo|Trình độ|Chuyên môn|Nơi làm việc|Quan hệ|Ghi chú)', line, re.IGNORECASE)):
             
-        # Keep lines with Vietnamese text
-        if re.search(r'[ÀÁẠẢÃÂẦẤẬẨẪĂẰẮẶẲẴÈÉẸẺẼÊỀẾỆỂỄÌÍỊỈĨÒÓỌỎÕÔỒỐỘỔỖƠỜỚỢỞỠÙÚỤỦŨƯỪỨỰỬỮỲÝỴỶỸĐ]', line):
+            # Clean up common OCR errors in Vietnamese text
+            line = re.sub(r'(?<=[^_])\s+(?=[^_])', ' ', line)  # Keep underscores but normalize other spaces
+            line = re.sub(r'[.,]\s*(?=[A-ZÀÁẠẢÃÂẦẤẬẨẪĂẰẮẶẲẴÈÉẸẺẼÊỀẾỆỂỄ])', '.\n', line)  # Split sentences
+            current_section.append(line)
+            
+        # Keep lines with form field markers
+        elif re.search(r'[_]{3,}|[:]{1}|[\.]{3,}', line):
+            if current_section:  # Save accumulated section
+                clean_lines.extend(current_section)
+                current_section = []
             clean_lines.append(line)
-        # Keep lines with form field indicators
-        elif re.search(r'(Họ và tên|Sinh năm|Sinh ngày|Giấy CCCD|CMND|Ngày cấp|Nơi cấp|Hộ khẩu|Chỗ ở|Nơi ở|Địa chỉ|Đơn|Xác nhận|UBND|Ngày|Tháng|Năm|Diện tích|Chiều dài|Chiều rộng|Phía|giáp|Tôi là|Tôi làm|Kính gửi|Kính đề nghị|Cam đoan|Chân thành|Xin chịu)', line):
-            clean_lines.append(line)
+            
         # Keep lines with reasonable length and content
-        elif len(line) > 3 and not re.search(r'[0-9]{4,}', line):
-            clean_lines.append(line)
+        elif len(line) > 3 and not re.search(r'[0-9]{5,}', line):
+            current_section.append(line)
     
-    return '\n'.join(clean_lines)
+    # Add any remaining section
+    if current_section:
+        clean_lines.extend(current_section)
+    
+    # Join lines and normalize final text
+    cleaned_text = '\n'.join(clean_lines)
+    cleaned_text = re.sub(r'\n{3,}', '\n\n', cleaned_text)  # Normalize multiple newlines
+    return cleaned_text
 
 def send_to_sealion(cleaned_text: str) -> dict:
     """Improved SEA-LION prompt for comprehensive form field extraction"""

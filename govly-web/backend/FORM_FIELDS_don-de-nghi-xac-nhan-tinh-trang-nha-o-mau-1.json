@@ -1,0 +1,127 @@
+{
+  "form_title": "ĐƠN XÁC NHẬN NHÀ Ở HỢP PHÁP",
+  "form_type": "Xác nhận nhà ở",
+  "recipient": "UBND",
+  "form_fields": [
+    {
+      "field_name": "Giấy CCCD số",
+      "field_type": "text_input",
+      "required": true,
+      "description": "Số giấy chứng minh nhân dân",
+      "input_format": "text"
+    },
+    {
+      "field_name": "Ngày cấp",
+      "field_type": "date",
+      "required": true,
+      "description": "Ngày cấp giấy chứng minh nhân dân",
+      "input_format": "ngày/tháng/năm"
+    },
+    {
+      "field_name": "Hộ khẩu thường trú",
+      "field_type": "address",
+      "required": true,
+      "description": "Địa chỉ hộ khẩu thường trú",
+      "input_format": "text"
+    },
+    {
+      "field_name": "Chỉ thị hợp pháp tại địa chỉ",
+      "field_type": "text_input",
+      "required": true,
+      "description": "Chỉ thị hợp pháp tại địa chỉ",
+      "input_format": "text"
+    },
+    {
+      "field_name": "Địa điểm",
+      "field_type": "text_input",
+      "required": true,
+      "description": "Địa điểm",
+      "input_format": "text"
+    },
+    {
+      "field_name": "Nguồn gốc",
+      "field_type": "text_input",
+      "required": true,
+      "description": "Nguồn gốc",
+      "input_format": "text"
+    },
+    {
+      "field_name": "Tình trạng chỗ ở",
+      "field_type": "text_input",
+      "required": true,
+      "description": "Tình trạng chỗ ở",
+      "input_format": "text"
+    },
+    {
+      "field_name": "Loại chỗ ở",
+      "field_type": "text_input",
+      "required": true,
+      "description": "Loại chỗ ở",
+      "input_format": "text"
+    },
+    {
+      "field_name": "Nguồn số",
+      "field_type": "text_input",
+      "required": true,
+      "description": "Nguồn số",
+      "input_format": "text"
+    },
+    {
+      "field_name": "Tư cách",
+      "field_type": "text_input",
+      "required": true,
+      "description": "Tư cách",
+      "input_format": "text"
+    },
+    {
+      "field_name": "Đề nghị ủy ban nhân dân",
+      "field_type": "text_input",
+      "required": true,
+      "description": "Đề nghị ủy ban nhân dân",
+      "input_format": "text"
+    },
+    {
+      "field_name": "Xác nhận đề tích bản đăng ký",
+      "field_type": "text_input",
+      "required": true,
+      "description": "Xác nhận đề tích bản đăng ký",
+      "input_format": "text"
+    },
+    {
+      "field_name": "Ngày",
+      "field_type": "date",
+      "required": true,
+      "description": "Ngày",
+      "input_format": "ngày/tháng/năm"
+    },
+    {
+      "field_name": "Người viết đơn",
+      "field_type": "text_input",
+      "required": true,
+      "description": "Người viết đơn",
+      "input_format": "text"
+    },
+    {
+      "field_name": "Thẩm định",
+      "field_type": "text_input",
+      "required": true,
+      "description": "Thẩm định",
+      "input_format": "text"
+    },
+    {
+      "field_name": "Xác nhận của UBND",
+      "field_type": "signature",
+      "required": true,
+      "description": "Xác nhận của UBND",
+      "input_format": "signature"
+    },
+    {
+      "field_name": "Ký, ghi rõ họ tên",
+      "field_type": "signature",
+      "required": true,
+      "description": "Ký, ghi rõ họ tên",
+      "input_format": "signature"
+    }
+  ],
+  "total_fields": 17
+}
