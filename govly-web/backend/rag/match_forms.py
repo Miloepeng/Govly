@@ -44,7 +44,10 @@ def search_forms(query, top_k=5, country=None, agency=None):
         query_vec = EMB.encode([query], normalize_embeddings=True).tolist()[0]
         rpc_params = {"query_embedding": query_vec, "match_count": top_k}
         if country:
-            rpc_params["filter_country"] = country
+            # Normalize country names to match DB (e.g., Vietnam -> VN)
+            key = country.strip().lower()
+            country_norm = {"vietnam": "VN", "viet nam": "VN", "vn": "VN"}.get(key, country)
+            rpc_params["filter_country"] = country_norm
         if agency:
             rpc_params["filter_agency"] = agency
 

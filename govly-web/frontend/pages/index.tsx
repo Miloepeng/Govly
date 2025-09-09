@@ -21,6 +21,7 @@ export default function Home() {
 
   const [selectedCountry, setSelectedCountry] = useState('Vietnam');
   const [selectedLanguage, setSelectedLanguage] = useState('English');
+  const [selectedCategory, setSelectedCategory] = useState<'housing' | 'business'>('housing');
   const [formSchema, setFormSchema] = useState<any>(null);
 
   const [pendingField, setPendingField] = useState<string | null>(null);
@@ -153,12 +154,16 @@ export default function Home() {
     const savedLanguage = localStorage.getItem("selectedLanguage");
     const savedAgency = localStorage.getItem("selectedAgency");
     const savedButton = localStorage.getItem("selectedButton");
+    const savedCategory = localStorage.getItem("selectedCategory");
 
     if (savedCountry) setSelectedCountry(savedCountry);
     if (savedLanguage) setSelectedLanguage(savedLanguage);
     if (savedAgency) setSelectedAgency(savedAgency);
     if (savedButton && (savedButton === 'smart' || savedButton === 'ragLink' || savedButton === 'ragForm')) {
       setSelectedButton(savedButton as 'smart' | 'ragLink' | 'ragForm');
+    }
+    if (savedCategory && (savedCategory === 'housing' || savedCategory === 'business')) {
+      setSelectedCategory(savedCategory as 'housing' | 'business');
     }
 
     console.log("✅ Restored user preferences from localStorage");
@@ -191,6 +196,10 @@ export default function Home() {
   useEffect(() => {
     localStorage.setItem("selectedButton", selectedButton);
   }, [selectedButton]);
+
+  useEffect(() => {
+    localStorage.setItem("selectedCategory", selectedCategory);
+  }, [selectedCategory]);
 
   const handleSendMessage = async () => {
     if (!input.trim() || isLoading) return;
@@ -239,7 +248,8 @@ export default function Home() {
       selectedAgency: selectedAgency, // Pass selected agency to backend
       settings: {
         ...settings,
-        responseType: selectedButton // Pass the selected button type to the API
+        responseType: selectedButton, // Pass the selected button type to the API
+        category: selectedCategory
       }
     };
     console.log('DEBUG: Sending request with country:', selectedCountry, 'language:', selectedLanguage);
@@ -336,7 +346,8 @@ export default function Home() {
               body: JSON.stringify({
                 query: userMessage.content,
                 country: selectedCountry,
-                language: selectedLanguage
+                language: selectedLanguage,
+                category: selectedCategory
               })
             });
             if (ragResponse.ok) {
@@ -373,8 +384,8 @@ export default function Home() {
                 formResults = formData.results;
 
                 if (formResults.length > 0) {
-                  // 👇 Call extractForm on the first result
-                  const extractResponse = await fetch('/api/extractForm', {
+                  // 👇 Call extractFormPreprocessed on the first result
+                  const extractResponse = await fetch('/api/extractFormPreprocessed', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ url: formResults[0].url })
@@ -587,7 +598,7 @@ export default function Home() {
         {/* Header */}
         <div className="px-6 py-4 bg-gray-50">
           <div className="flex items-center justify-between">
-            {/* Country and Language dropdowns */}
+            {/* Country, Language, and Category dropdowns */}
             <div className="flex items-center gap-3">
               {/* Country dropdown */}
               <div className="flex items-center gap-2">
@@ -616,6 +627,18 @@ export default function Home() {
                       {language.name}
                     </option>
                   ))}
+                </select>
+              </div>
+
+              {/* Category dropdown */}
+              <div className="flex items-center gap-2">
+                <select
+                  value={selectedCategory}
+                  onChange={(e) => setSelectedCategory(e.target.value as 'housing' | 'business')}
+                  className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-900"
+                >
+                  <option value="housing">Housing</option>
+                  <option value="business">Business</option>
                 </select>
               </div>
             </div>

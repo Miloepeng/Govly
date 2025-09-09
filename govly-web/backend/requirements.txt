@@ -22,3 +22,7 @@ llama-index==0.13.5
 # extensions compatible with 0.13.x core
 llama-index-embeddings-huggingface>=0.6.0,<0.7
 llama-index-vector-stores-supabase>=0.4.0,<0.5
+
+# AWS SDK for Textract
+boto3>=1.34.0,<2.0
+botocore>=1.34.0,<2.0

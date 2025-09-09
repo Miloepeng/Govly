@@ -22,6 +22,11 @@ def _use_llamaindex() -> bool:
     return os.getenv("USE_LLAMA_INDEX", "false").lower() in ("1", "true", "yes", "on")
 
 
+def _use_llamaindex_rpc() -> bool:
+    """Force a pure-RPC mode that never attempts direct Postgres connections."""
+    return os.getenv("USE_LLAMA_INDEX_RPC", "false").lower() in ("1", "true", "yes", "on")
+
+
 def _build_llamaindex_index(table_name: str):
     """
     Try to build a LlamaIndex VectorStoreIndex backed by Supabase.
@@ -30,7 +35,7 @@ def _build_llamaindex_index(table_name: str):
     try:
         from supabase import create_client
         from llama_index.embeddings.huggingface import HuggingFaceEmbedding
-        from llama_index.core import VectorStoreIndex, StorageContext
+        from llama_index.core import VectorStoreIndex
         from llama_index.vector_stores.supabase import SupabaseVectorStore
 
         supabase_url = os.environ.get("SUPABASE_URL")
@@ -40,15 +45,39 @@ def _build_llamaindex_index(table_name: str):
 
         client = create_client(supabase_url, supabase_key)
 
-        # Table name can be customized per deployment; default to provided
-        vector_store = SupabaseVectorStore(client=client, table_name=table_name)
+        # Allow custom column names via env to match existing schema
+        embedding_col = os.environ.get("SUPABASE_EMBEDDING_COLUMN", "embedding")
+        text_col = os.environ.get("SUPABASE_TEXT_COLUMN", "content")
+        metadata_col = os.environ.get("SUPABASE_METADATA_COLUMN", "metadata")
+
+        # Newer SupabaseVectorStore requires direct Postgres connection string
+        pg_conn = os.environ.get("SUPABASE_PG_CONN")
+        collection_name = os.environ.get("SUPABASE_COLLECTION", table_name)
+
+        if not pg_conn:
+            print("[RAG] SUPABASE_PG_CONN not set; cannot initialize LlamaIndex SupabaseVectorStore. Set a Postgres connection string to enable.")
+            return None, None
+
+        try:
+            vector_store = SupabaseVectorStore(
+                postgres_connection_string=pg_conn,
+                collection_name=collection_name,
+                content_column=text_col,
+                embedding_column=embedding_col,
+                metadata_column=metadata_col,
+            )
+        except Exception as inner_e2:
+            print(f"[RAG] SupabaseVectorStore init failed (pg conn): {inner_e2}")
+            return None, None
 
         # Use the same embedding family as pre-embedding (BAAI/bge-m3)
         embed_model = HuggingFaceEmbedding(model_name="BAAI/bge-m3")
 
         index = VectorStoreIndex.from_vector_store(vector_store=vector_store, embed_model=embed_model)
+        print(f"[RAG] LlamaIndex vector index created for collection '{collection_name}' (text='{text_col}', embedding='{embedding_col}', metadata='{metadata_col}')")
         return index, vector_store
-    except Exception:
+    except Exception as e:
+        print(f"[RAG] LlamaIndex index build error: {e}")
         return None, None
 
 
@@ -66,16 +95,29 @@ def _apply_filters_to_query_kwargs(country: Optional[str], agency: Optional[str]
     return filters
 
 
-def search_links_llamaindex(query: str, top_k: int = 5, country: Optional[str] = None, agency: Optional[str] = None) -> List[Dict[str, Any]]:
+def search_links_llamaindex(query: str, top_k: int = 5, country: Optional[str] = None, agency: Optional[str] = None, category: Optional[str] = None) -> List[Dict[str, Any]]:
     """Search policy/content chunks using LlamaIndex+Supabase when enabled, else fallback to RPC."""
+    if _use_llamaindex_rpc():
+        print("[RAG] Using LlamaIndex RPC retriever for links (no direct PG connection)")
+        return rpc_search_chunks(query, top_k=top_k, country=country, agency=agency, category=category)
+
     if not _use_llamaindex():
         print("[RAG] LlamaIndex disabled via env; using RPC search for links")
-        return rpc_search_chunks(query, top_k=top_k, country=country, agency=agency)
+        return rpc_search_chunks(query, top_k=top_k, country=country, agency=agency, category=category)
 
-    index, _ = _build_llamaindex_index(os.getenv("SUPABASE_CHUNKS_TABLE", "chunks"))
+    # Hard route by category to specific table names if provided
+    table_env = os.getenv("SUPABASE_CHUNKS_TABLE", "chunks")
+    if category and category.lower() == "housing":
+        table_env = os.getenv("SUPABASE_CHUNKS_TABLE_HOUSING", "chunks_housing")
+        print(f"[RAG] Category=housing → using table {table_env}")
+    elif category and category.lower() == "business":
+        table_env = os.getenv("SUPABASE_CHUNKS_TABLE_BUSINESS", "chunks_business")
+        print(f"[RAG] Category=business → using table {table_env}")
+
+    index, _ = _build_llamaindex_index(table_env)
     if not index:
         print("[RAG] LlamaIndex index setup failed; falling back to RPC for links")
-        return rpc_search_chunks(query, top_k=top_k, country=country, agency=agency)
+        return rpc_search_chunks(query, top_k=top_k, country=country, agency=agency, category=category)
 
     try:
         from llama_index.core.vector_stores import VectorStoreQuery
@@ -105,6 +147,10 @@ def search_links_llamaindex(query: str, top_k: int = 5, country: Optional[str] =
 
 def search_forms_llamaindex(query: str, top_k: int = 5, country: Optional[str] = None, agency: Optional[str] = None) -> List[Dict[str, Any]]:
     """Search forms using LlamaIndex+Supabase when enabled, else fallback to RPC."""
+    if _use_llamaindex_rpc():
+        print("[RAG] Using LlamaIndex RPC retriever for forms (no direct PG connection)")
+        return rpc_search_forms(query, top_k=top_k, country=country, agency=agency)
+
     if not _use_llamaindex():
         print("[RAG] LlamaIndex disabled via env; using RPC search for forms")
         return rpc_search_forms(query, top_k=top_k, country=country, agency=agency)

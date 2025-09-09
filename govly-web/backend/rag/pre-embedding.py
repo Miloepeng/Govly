@@ -43,10 +43,11 @@ def clean_text(s: str) -> str:
     return s.replace("\u0000", "").strip()
 
 SEEDS = [
-("US-IL", "ISBE", "Illinois State Board of Education – Complaint Form (Vietnamese)", 
- "https://www.isbe.net/Documents/complaint-form-Vietnamese.pdf"),
-
-
+(
+    "VN", "MPI",
+    "Hướng dẫn sử dụng dịch vụ công qua mạng điện tử — National Business Registration Portal",
+    "https://dangkykinhdoanh.gov.vn/vn/Pages/Huongdansudungdvc.aspx",
+)
 ]
 
 
@@ -60,6 +61,17 @@ def main():
 
     supabase = create_client(supabase_url, supabase_key)
     inserted_total = 0
+
+    # Determine target table (supports category-specific housing/business)
+    category = os.environ.get("CATEGORY")  # e.g., "housing" | "business"
+    if category and category.lower() == "housing":
+        table_name = os.environ.get("SUPABASE_CHUNKS_TABLE_HOUSING", "chunks_housing")
+    elif category and category.lower() == "business":
+        table_name = os.environ.get("SUPABASE_CHUNKS_TABLE_BUSINESS", "chunks_business")
+    else:
+        table_name = os.environ.get("SUPABASE_CHUNKS_TABLE", "chunks")
+
+    print(f"📦 Embedding category: {category or 'default'} → target table: {table_name}")
 
     for country, agency, title, url in SEEDS:
         try:
@@ -89,7 +101,7 @@ def main():
                 ]
 
                 # Force returning inserted rows for debugging
-                response = supabase.table("chunks").insert(rows).execute()
+                response = supabase.table(table_name).insert(rows).execute()
 
                 print("Insert response:", response)  # Debug output
 

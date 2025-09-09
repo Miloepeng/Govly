@@ -13,7 +13,28 @@ supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 # Load same embedding model used in Pre-Embedding.py
 EMB = SentenceTransformer("BAAI/bge-m3")
 
-def search_chunks(query, top_k=5, country=None, agency=None):
+
+def _normalize_country(country: str | None) -> str | None:
+    if not country:
+        return country
+    mapping = {
+        "vietnam": "VN",
+        "viet nam": "VN",
+        "vn": "VN",
+    }
+    key = country.strip().lower()
+    return mapping.get(key, country)
+
+def _select_match_function_name(category: str | None) -> str:
+    if category:
+        if category.lower() == "housing":
+            return os.environ.get("SUPABASE_MATCH_CHUNKS_FUNC_HOUSING", "match_chunks_housing")
+        if category.lower() == "business":
+            return os.environ.get("SUPABASE_MATCH_CHUNKS_FUNC_BUSINESS", "match_chunks_business")
+    return os.environ.get("SUPABASE_MATCH_CHUNKS_FUNC", "match_chunks")
+
+
+def search_chunks(query, top_k=5, country=None, agency=None, category: str | None = None):
     # 1. Embed query
     query_vec = EMB.encode([query], normalize_embeddings=True).tolist()[0]
 
@@ -23,12 +44,14 @@ def search_chunks(query, top_k=5, country=None, agency=None):
         "match_count": top_k
     }
     if country:
-        rpc_params["filter_country"] = country
+        rpc_params["filter_country"] = _normalize_country(country)
     if agency:
         rpc_params["filter_agency"] = agency
 
-    # 3. Call Postgres function in Supabase
-    response = supabase.rpc("match_chunks", rpc_params).execute()
+    # 3. Call Postgres function in Supabase (category-aware)
+    function_name = _select_match_function_name(category)
+    print(f"[RAG] RPC function selected: {function_name} (category={category}, country={rpc_params.get('filter_country')}, agency={rpc_params.get('filter_agency')})")
+    response = supabase.rpc(function_name, rpc_params).execute()
 
     if not response.data:
         print("No matches found")

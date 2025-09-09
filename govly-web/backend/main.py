@@ -18,6 +18,9 @@ from rag.match_forms import search_forms
 from rag.llamaindex_retriever import search_links_llamaindex, search_forms_llamaindex
 from tesseract_extractor import extract_pdf_to_text, clean_ocr_text, send_to_sealion
 
+# Import form data retrieval
+from get_form_data import get_form_by_id, get_form_by_filename, search_forms_by_category, get_all_form_categories, get_form_schema_for_filling, get_available_forms_summary
+
 # Import LangChain components from organized structure
 from utils.chain_utils import get_chat_chain, get_intent_chain, get_agency_chain, get_agency_detection_chain, get_rag_chain, get_form_chain
 
@@ -96,6 +99,7 @@ class RAGRequest(BaseModel):
     query: str
     country: str = "Vietnam"
     language: str = "Vietnamese"
+    category: Optional[str] = None
 
 class FormRequest(BaseModel):
     query: str
@@ -204,7 +208,8 @@ async def smart_chat(request: ChatRequest):
         if response_type == "ragLink":
             print(f"DEBUG: Routing to: RAG Link Search")
             # Route to RAG link search and create proper response structure
-            rag_response = await rag_link_search(RAGRequest(query=request.message))
+            # Thread category from settings if provided
+            rag_response = await rag_link_search(RAGRequest(query=request.message, category=request.settings.get("category")))
             if rag_response.get('results'):
                 # Get explanation for the documents
                 explain_response = await explain_documents(ExplainRequest(
@@ -365,7 +370,7 @@ async def choose_agency(request: ChatRequest, detected_category: str, suggested_
 async def rag_link_search(request: RAGRequest):
     try:
         # Prefer LlamaIndex when enabled; module falls back automatically
-        results = search_links_llamaindex(request.query, top_k=3, country=request.country)
+        results = search_links_llamaindex(request.query, top_k=3, country=request.country, category=request.category)
         return {"results": results}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -593,6 +598,161 @@ async def extract_form(request: ExtractFormRequest):
         print("💥 Exception in extract_form:", e)
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/api/extractFormPreprocessed")
+async def extract_form_preprocessed(request: ExtractFormRequest):
+    """Extract form fields using preprocessed data from database."""
+    try:
+        pdf_url = request.url
+        print(f"📥 Received form path/url: {pdf_url}")
+
+        # Resolve filename and map to backend/forms
+        filename = os.path.basename(pdf_url)
+        print(f"🔍 Looking for preprocessed form: {filename}")
+
+        # Try to get preprocessed form data from database
+        form_data = get_form_by_filename(filename)
+        
+        if form_data and form_data.get('form_fields'):
+            print(f"✅ Found preprocessed form data in database!")
+            print(f"   Form ID: {form_data['id']}")
+            print(f"   Title: {form_data['title']}")
+            print(f"   Fields: {form_data['field_count']}")
+            print(f"   Processing method: {form_data['processing_status']}")
+            
+            # Convert preprocessed form fields to the expected format
+            preprocessed_fields = form_data['form_fields']
+            
+            if isinstance(preprocessed_fields, dict) and 'fields' in preprocessed_fields:
+                # New format with fields array
+                fields_list = preprocessed_fields['fields']
+            elif isinstance(preprocessed_fields, list):
+                # Direct list format
+                fields_list = preprocessed_fields
+            else:
+                print("⚠️ Unexpected form_fields format, falling back to OCR")
+                return await extract_form_fallback(request)
+            
+            # Convert to the format expected by the frontend
+            converted_fields = []
+            for field in fields_list:
+                converted_field = {
+                    "name": field.get("name", "unnamed_field"),
+                    "type": field.get("type", "text"),
+                    "label": field.get("label", field.get("name", "Unnamed field")),
+                    "required": field.get("required", False),
+                    "description": field.get("description", ""),
+                    "confidence": field.get("confidence", 0)
+                }
+                
+                # Add value if it exists (for pre-filled forms)
+                if "value" in field:
+                    converted_field["value"] = field["value"]
+                
+                converted_fields.append(converted_field)
+            
+            print(f"✅ Converted {len(converted_fields)} preprocessed fields")
+            return {"fields": converted_fields}
+        
+        else:
+            print(f"⚠️ No preprocessed data found for {filename}, falling back to OCR")
+            return await extract_form_fallback(request)
+
+    except Exception as e:
+        print("💥 Exception in extract_form_preprocessed:", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+async def extract_form_fallback(request: ExtractFormRequest):
+    """Fallback to OCR processing when preprocessed data is not available."""
+    try:
+        pdf_url = request.url
+        print(f"🔄 Using OCR fallback for: {pdf_url}")
+
+        # Resolve filename and map to backend/forms
+        filename = os.path.basename(pdf_url)
+        forms_dir = os.path.join(current_dir, "forms")
+        tmp_pdf_path = os.path.join(forms_dir, filename)
+
+        if not os.path.exists(tmp_pdf_path):
+            raise HTTPException(status_code=404, detail=f"PDF not found: {tmp_pdf_path}")
+
+        print(f"📄 Using local PDF path: {tmp_pdf_path}")
+
+        # OCR step
+        result = extract_pdf_to_text(tmp_pdf_path)
+        if "error" in result:
+            print("❌ OCR error:", result["error"])
+            raise HTTPException(status_code=500, detail=result["error"])
+
+        text = result.get("text", "").strip()
+        print(f"📝 OCR text length: {len(text)}")
+
+        if not text:
+            return {
+                "fields": [
+                    {
+                        "name": "manual_entry",
+                        "type": "text",
+                        "label": "⚠️ OCR produced no text, please fill manually"
+                    }
+                ]
+            }
+
+        # Clean OCR text and process with LangChain
+        cleaned_text = clean_ocr_text(text)
+        
+        # Get LangChain form processing handler
+        form_chain = get_form_chain()
+        fields_json = form_chain.extract_form_fields(cleaned_text)
+
+        if "error" in fields_json:
+            print("❌ Form extraction error:", fields_json)
+            raise HTTPException(status_code=500, detail=str(fields_json))
+
+        # Normalize LLM response
+        fields_list = []
+        if "fields" in fields_json and isinstance(fields_json["fields"], list):
+            fields_list = fields_json["fields"]
+        elif "form_fields" in fields_json and isinstance(fields_json["form_fields"], list):
+            fields_list = [
+                {
+                    "name": f.get("field_name", ""),
+                    "type": map_field_type(f.get("field_type", "")),
+                    "label": f.get("field_name", "Unnamed field"),
+                    "required": f.get("required", False),
+                    "description": f.get("description", "")
+                }
+                for f in fields_json["form_fields"]
+            ]
+        
+        # Normalize all fields
+        all_fields = [
+            {
+                "name": normalize_field_name(f.get("name", "")),
+                "type": map_field_type(f.get("type", "")),
+                "label": f.get("label", "Unnamed field"),
+                "required": f.get("required", False),
+                "description": f.get("description", "")
+            }
+            for f in fields_list
+        ]
+        
+        # Remove duplicates
+        seen_fields = set()
+        unique_fields = []
+        
+        for field in all_fields:
+            field_key = (field["name"], field["type"])
+            if field_key not in seen_fields:
+                seen_fields.add(field_key)
+                unique_fields.append(field)
+        
+        print(f"✅ OCR fallback extracted {len(unique_fields)} fields")
+        return {"fields": unique_fields}
+
+    except Exception as e:
+        print("💥 Exception in extract_form_fallback:", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
 # Explain API endpoint
 import json
 import re
@@ -709,7 +869,95 @@ async def fill_form(request: FillFormRequest):
         print("💥 Exception in fill_form:", e)
         raise HTTPException(status_code=500, detail=str(e))
 
+# ---------------- Form Data Retrieval Endpoints ----------------
 
+@app.get("/api/formData/{form_id}")
+async def get_form_data_endpoint(form_id: int):
+    """Get complete form data including extracted fields for chatbot use."""
+    try:
+        form_data = get_form_by_id(form_id)
+        if not form_data:
+            raise HTTPException(status_code=404, detail="Form not found")
+        
+        return form_data
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"💥 Exception in get_form_data: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/formSchema/{form_id}")
+async def get_form_schema_endpoint(form_id: int):
+    """Get form schema formatted for form filling."""
+    try:
+        schema = get_form_schema_for_filling(form_id)
+        if not schema:
+            raise HTTPException(status_code=404, detail="Form not found or no schema available")
+        
+        return schema
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"💥 Exception in get_form_schema: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/formsByCategory/{category}")
+async def get_forms_by_category_endpoint(category: str, limit: int = 10):
+    """Get forms by category."""
+    try:
+        forms = search_forms_by_category(category, limit)
+        return {
+            "category": category,
+            "forms": forms,
+            "total": len(forms)
+        }
+        
+    except Exception as e:
+        print(f"💥 Exception in get_forms_by_category: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/formCategories")
+async def get_form_categories_endpoint():
+    """Get all available form categories."""
+    try:
+        categories = get_all_form_categories()
+        return {
+            "categories": categories,
+            "total": len(categories)
+        }
+        
+    except Exception as e:
+        print(f"💥 Exception in get_form_categories: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/formsSummary")
+async def get_forms_summary_endpoint():
+    """Get summary of all available forms."""
+    try:
+        summary = get_available_forms_summary()
+        return summary
+        
+    except Exception as e:
+        print(f"💥 Exception in get_forms_summary: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/formByFilename/{filename}")
+async def get_form_by_filename_endpoint(filename: str):
+    """Get form data by filename."""
+    try:
+        form_data = get_form_by_filename(filename)
+        if not form_data:
+            raise HTTPException(status_code=404, detail="Form not found")
+        
+        return form_data
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"💥 Exception in get_form_by_filename: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     import uvicorn

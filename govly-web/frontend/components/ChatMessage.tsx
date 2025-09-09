@@ -105,14 +105,14 @@ export default function ChatMessage({
     if (!selectedForm?.url) return;
 
     try {
-      const response = await fetch('/api/extractForm', {
+      const response = await fetch('/api/extractFormPreprocessed', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url: selectedForm.url }),
       });
       if (response.ok) {
         const data = await response.json();
-        console.log("✅ extractForm response:", data);
+        console.log("✅ extractFormPreprocessed response:", data);
 
         // ✅ Only update sidebar form schema now
         if (setFormSchema) setFormSchema(data);
@@ -205,14 +205,14 @@ export default function ChatMessage({
                         setExtractedFormSchema(null);
                         
                         try {
-                          const response = await fetch('http://localhost:8000/api/extractForm', {
+                          const response = await fetch('http://localhost:8000/api/extractFormPreprocessed', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ url: result.url }),
                           });
                           if (response.ok) {
                             const data = await response.json();
-                            console.log("✅ extractForm response:", data);
+                            console.log("✅ extractFormPreprocessed response:", data);
                             setExtractedFormSchema(data);
                             if (setFormSchema) setFormSchema(data); // also send to sidebar
                           } else {
