@@ -30,20 +30,26 @@ class ChatChain:
         # Create processing pipeline: prompt -> llm -> output parser
         self.chain = self.prompt | self.llm | self.output_parser
     
-    def format_chat_history(self, conversation_context: List[Dict[str, Any]]) -> str:
-        """Convert conversation array to formatted string for prompt"""
+    def format_chat_history(self, conversation_context: List[Dict[str, Any]]) -> List:
+        """Convert conversation array to LangChain message format"""
         if not conversation_context:
-            return ""
+            return []
         
-        # Format each message as "Role: content" for the prompt
+        # Convert to LangChain message format using proper message objects
+        from langchain_core.messages import HumanMessage, AIMessage
+        
         formatted_messages = []
         for msg in conversation_context:
             role = msg.get("role", "")
             content = msg.get("content", "")
             if role in ["user", "assistant"] and content:
-                formatted_messages.append(f"{role.title()}: {content}")
+                # Convert to proper LangChain message objects
+                if role == "user":
+                    formatted_messages.append(HumanMessage(content=content))
+                else:
+                    formatted_messages.append(AIMessage(content=content))
         
-        return "\n".join(formatted_messages)
+        return formatted_messages
     
     def chat(self, message: str, country: str, language: str, 
              selected_agency: Optional[str] = None, 
@@ -59,7 +65,7 @@ class ChatChain:
         # Add agency context to system prompt if specified
         agency_context = f" You are specifically representing the {selected_agency} agency." if selected_agency else ""
         
-        # Convert conversation array to formatted string
+        # Convert conversation array to LangChain message format
         chat_history = self.format_chat_history(conversation_context or [])
         
         try:

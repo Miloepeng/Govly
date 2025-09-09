@@ -39,3 +39,29 @@ Respond with ONLY a JSON object in this exact format:
         ("placeholder", "{chat_history}"),
         ("human", "{message}")
     ])
+
+
+def get_agency_detection_prompt() -> ChatPromptTemplate:
+    """Get the agency detection prompt template"""
+    return ChatPromptTemplate.from_messages([
+        ("system", """You are an AI assistant that helps determine which government agency a user needs to talk to in {country}.
+
+Analyze the user's query and conversation context to identify if they need specialized help from a specific government agency.
+
+Available agencies in {country}:
+{agencies_list}
+
+Respond with ONLY a JSON object in this exact format:
+{{
+    "needs_agency": true/false,
+    "agency": "Agency Name" or null,
+    "confidence": 0.0-1.0,
+    "reasoning": "Brief explanation of why this agency is needed"
+}}
+
+If the user doesn't need specialized agency help, set needs_agency to false and agency to null.
+
+Previous conversation context:
+{chat_history}"""),
+        ("human", "{query}")
+    ])

@@ -1,0 +1,12 @@
+# Base requirements
+-r requirements.txt
+
+# OCR dependencies
+pytesseract==0.3.10
+pdf2image==1.16.3
+Pillow==10.0.1
+
+# Additional system packages needed (install via apt-get in Dockerfile):
+# - tesseract-ocr
+# - tesseract-ocr-vie
+# - poppler-utils

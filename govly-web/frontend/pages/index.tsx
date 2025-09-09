@@ -578,17 +578,10 @@ export default function Home() {
 
   return (
     <div className="flex h-screen bg-white">
-      <div className="flex flex-col w-80 bg-gray-100 border-r border-gray-200">
-        <Sidebar 
-          settings={settings} 
-          onSettingsChange={setSettings}
-        />
-
-        {/* Form is now displayed in the main chat area instead of sidebar */}
-      </div>
-
-      
-      
+      <Sidebar 
+        settings={settings} 
+        onSettingsChange={setSettings}
+      />
       
       <div className="flex-1 flex flex-col">
         {/* Header */}

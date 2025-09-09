@@ -17,7 +17,7 @@ export default function Sidebar({ settings, onSettingsChange }: SidebarProps) {
   const [isOpen, setIsOpen] = useState(true);
 
   return (
-    <div className={`modern-sidebar h-full ${isOpen ? 'w-80' : 'w-20'} transition-all duration-200 p-4 overflow-y-auto`}>
+    <div className={`modern-sidebar h-full ${isOpen ? 'w-80' : 'w-20'} transition-all duration-200 p-4 overflow-y-auto bg-gray-100 border-r border-gray-200`}>
       {isOpen ? (
         <>
           <div className="flex items-center justify-between mb-6">

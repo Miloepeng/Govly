@@ -18,7 +18,7 @@ from rag.match_forms import search_forms
 from tesseract_extractor import extract_pdf_to_text, clean_ocr_text, send_to_sealion
 
 # Import LangChain components from organized structure
-from utils.chain_utils import get_chat_chain, get_intent_chain, get_agency_chain
+from utils.chain_utils import get_chat_chain, get_intent_chain, get_agency_chain, get_agency_detection_chain, get_rag_chain, get_form_chain
 
 print("✅ DEBUG: RAG imports successful")
 
@@ -369,121 +369,26 @@ async def rag_link_search(request: RAGRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# ---------------- Agency Detection endpoint ----------------
+# ---------------- Agency Detection endpoint (LangChain version) ----------------
 @app.post("/api/detectAgency")
 async def detect_agency(request: AgencyDetectionRequest):
     try:
-        api_key = os.getenv("SEA_LION_API_KEY")
-        if not api_key:
-            raise HTTPException(status_code=500, detail="SEA_LION_API_KEY not found")
+        # Get LangChain agency detection handler
+        agency_detection_chain = get_agency_detection_chain()
         
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json"
-        }
+        print(f"DEBUG: Agency detection - query: {request.query}, country: {request.country}")
         
-        # Country-specific agency mapping
-        country_agencies = {
-            "Vietnam": {
-                "housing": ["Ministry of Construction", "Housing Development Authority", "Urban Development Agency"],
-                "land": ["Ministry of Natural Resources", "Land Administration Department", "Planning Institute"],
-                "immigration": ["Immigration Department", "Ministry of Public Security", "Border Guard Command"],
-                "employment": ["Ministry of Labor", "Social Insurance Agency", "Employment Service Center"],
-                "transport": ["Ministry of Transport", "Traffic Police", "Public Transport Authority"],
-                "environment": ["Ministry of Environment", "Environmental Protection Agency", "Forest Protection Department"],
-                "business": ["Ministry of Planning", "Business Registration Office", "Tax Department"],
-                "education": ["Ministry of Education", "University System", "Vocational Training Authority"]
-            },
-            "Singapore": {
-                "housing": ["Housing Development Board (HDB)", "Urban Redevelopment Authority (URA)"],
-                "land": ["Urban Redevelopment Authority (URA)", "Singapore Land Authority (SLA)"],
-                "immigration": ["Immigration & Checkpoints Authority (ICA)", "Ministry of Home Affairs"],
-                "employment": ["Ministry of Manpower (MOM)", "Central Provident Fund (CPF)"],
-                "transport": ["Land Transport Authority (LTA)", "Public Transport Council"],
-                "environment": ["National Environment Agency (NEA)", "Public Utilities Board"],
-                "business": ["Accounting and Corporate Regulatory Authority (ACRA)", "Enterprise Singapore"],
-                "education": ["Ministry of Education (MOE)", "SkillsFuture Singapore"]
-            },
-            "Thailand": {
-                "housing": ["Ministry of Interior", "Department of Public Works", "Bangkok Metropolitan Administration"],
-                "land": ["Department of Lands", "Ministry of Natural Resources", "Town Planning Department"],
-                "immigration": ["Immigration Bureau", "Ministry of Foreign Affairs", "Royal Thai Police"],
-                "employment": ["Ministry of Labor", "Social Security Office", "Department of Employment"],
-                "transport": ["Ministry of Transport", "Department of Highways", "Bangkok Mass Transit Authority"],
-                "environment": ["Ministry of Natural Resources", "Pollution Control Department", "Department of Environmental Quality"],
-                "business": ["Department of Business Development", "Ministry of Commerce", "Board of Investment"],
-                "education": ["Ministry of Education", "Office of Higher Education Commission", "Department of Non-Formal Education"]
-            }
-        }
-        
-        # Build context-aware prompt for agency detection
-        system_prompt = f"""You are an AI assistant that helps determine which government agency a user needs to talk to in {request.country}.
-
-Analyze the user's query and conversation context to identify if they need specialized help from a specific government agency.
-
-Available agencies in {request.country}:
-{chr(10).join([f"- {agency}" for category_agencies in country_agencies.get(request.country, {}).values() for agency in category_agencies])}
-
-Respond with ONLY a JSON object in this exact format:
-{{
-    "needs_agency": true/false,
-    "agency": "Agency Name" or null,
-    "confidence": 0.0-1.0,
-    "reasoning": "Brief explanation of why this agency is needed"
-}}
-
-If the user doesn't need specialized agency help, set needs_agency to false and agency to null."""
-
-        # Build messages array
-        messages = [{"role": "system", "content": system_prompt}]
-        if request.conversationContext:
-            for msg in request.conversationContext:
-                if msg.get("role") in ["user", "assistant"] and msg.get("content"):
-                    messages.append({
-                        "role": msg["role"],
-                        "content": msg["content"]
-                    })
-        
-        messages.append({
-            "role": "user",
-            "content": request.query
-        })
-        
-        payload = {
-            "max_completion_tokens": 200,
-            "messages": messages,
-            "model": "aisingapore/Llama-SEA-LION-v3-70B-IT",
-            "temperature": 0.1,  # Low temperature for consistent JSON output
-        }
-        
-        response = requests.post(
-            "https://api.sea-lion.ai/v1/chat/completions",
-            headers=headers,
-            json=payload,
-            timeout=60
+        # Process agency detection through LangChain pipeline
+        result = agency_detection_chain.detect_agency(
+            query=request.query,
+            country=request.country,
+            conversation_context=request.conversationContext
         )
         
-        if response.status_code == 200:
-            response_data = response.json()
-            response_text = response_data["choices"][0]["message"]["content"].strip()
-            
-            try:
-                # Parse JSON response
-                import json
-                agency_data = json.loads(response_text)
-                return agency_data
-            except json.JSONDecodeError:
-                # Fallback if JSON parsing fails
-                return {
-                    "needs_agency": False,
-                    "agency": None,
-                    "confidence": 0.0,
-                    "reasoning": "Could not determine agency from response"
-                }
-        else:
-            raise HTTPException(status_code=response.status_code, detail="SEA-LION API error")
-            
+        return result
+        
     except Exception as e:
+        print(f"💥 Exception in detect_agency: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 # ---------------- RAG Form search endpoint ----------------
@@ -556,6 +461,7 @@ async def extract_form(request: ExtractFormRequest):
 
         text = result.get("text", "").strip()
         print(f"📝 OCR text length: {len(text)}")
+        print(f"📝 First 500 chars of OCR text: {text[:500]}")
 
         if not text:
             return {
@@ -568,21 +474,28 @@ async def extract_form(request: ExtractFormRequest):
                 ]
             }
 
-        # Clean OCR text and send to SEA-LION
+        # Clean OCR text and process with LangChain
         cleaned_text = clean_ocr_text(text)
-        fields_json = send_to_sealion(cleaned_text)
-        print(f"🤖 SEA-LION raw response: {fields_json}")
+        print(f"📝 First 500 chars of cleaned text: {cleaned_text[:500]}")
+        
+        # Get LangChain form processing handler
+        form_chain = get_form_chain()
+        fields_json = form_chain.extract_form_fields(cleaned_text)
+        print(f"🤖 LangChain form extraction response: {fields_json}")
 
         if "error" in fields_json:
-            print("❌ SEA-LION error:", fields_json)
+            print("❌ Form extraction error:", fields_json)
             raise HTTPException(status_code=500, detail=str(fields_json))
 
-        # ✅ Normalize SEA-LION response and remove duplicates
-        if "form_fields" in fields_json and isinstance(fields_json["form_fields"], list):
-            # First normalize all fields
-            all_fields = [
+        # ✅ Normalize LLM response and remove duplicates
+        fields_list = []
+        if "fields" in fields_json and isinstance(fields_json["fields"], list):
+            fields_list = fields_json["fields"]
+        elif "form_fields" in fields_json and isinstance(fields_json["form_fields"], list):
+            # Convert old format to new format
+            fields_list = [
                 {
-                    "name": normalize_field_name(f["field_name"]),
+                    "name": f.get("field_name", ""),
                     "type": map_field_type(f.get("field_type", "")),
                     "label": f.get("field_name", "Unnamed field"),
                     "required": f.get("required", False),
@@ -591,63 +504,75 @@ async def extract_form(request: ExtractFormRequest):
                 for f in fields_json["form_fields"]
             ]
             
-            # Remove duplicate fields and merge similar ones
-            seen_fields = set()
-            unique_fields = []
-            duplicates_removed = 0
-            merged_fields = 0
-            renamed_fields = 0
+        # Normalize all fields
+        all_fields = [
+            {
+                "name": normalize_field_name(f.get("name", "")),
+                "type": map_field_type(f.get("type", "")),
+                "label": f.get("label", "Unnamed field"),
+                "required": f.get("required", False),
+                "description": f.get("description", "")
+            }
+            for f in fields_list
+        ]
+        
+        # Remove duplicate fields and merge similar ones
+        seen_fields = set()
+        unique_fields = []
+        duplicates_removed = 0
+        merged_fields = 0
+        renamed_fields = 0
+        
+        for field in all_fields:
+            # Create a unique identifier for the field
+            field_key = (field["name"], field["type"])
             
-            for field in all_fields:
-                # Create a unique identifier for the field
-                field_key = (field["name"], field["type"])
-                
-                # Also check for similar field names (e.g., "ho_ten" vs "ho_ten_1")
-                base_name = field["name"].split("_")[0] if "_" in field["name"] else field["name"]
-                base_key = (base_name, field["type"])
-                
-                if field_key not in seen_fields and base_key not in seen_fields:
-                    seen_fields.add(field_key)
-                    seen_fields.add(base_key)
-                    unique_fields.append(field)
+            # Also check for similar field names (e.g., "ho_ten" vs "ho_ten_1")
+            base_name = field["name"].split("_")[0] if "_" in field["name"] else field["name"]
+            base_key = (base_name, field["type"])
+            
+            if field_key not in seen_fields and base_key not in seen_fields:
+                seen_fields.add(field_key)
+                seen_fields.add(base_key)
+                unique_fields.append(field)
+            else:
+                # Check if we can merge with existing field (enhance description)
+                existing_field = next((f for f in unique_fields if f["name"] == field["name"] or f["name"].split("_")[0] == base_name), None)
+                if existing_field and field.get("description") and field["description"] != existing_field.get("description"):
+                    # Merge descriptions if they're different
+                    existing_field["description"] = f"{existing_field.get('description', '')} | {field['description']}"
+                    merged_fields += 1
+                    print(f"🔄 Merged descriptions for field: {field['name']}")
                 else:
-                    # Check if we can merge with existing field (enhance description)
-                    existing_field = next((f for f in unique_fields if f["name"] == field["name"] or f["name"].split("_")[0] == base_name), None)
-                    if existing_field and field.get("description") and field["description"] != existing_field.get("description"):
-                        # Merge descriptions if they're different
-                        existing_field["description"] = f"{existing_field.get('description', '')} | {field['description']}"
-                        merged_fields += 1
-                        print(f"🔄 Merged descriptions for field: {field['name']}")
-                    else:
-                        # Try to create a unique name by adding a suffix
-                        counter = 1
+                    # Try to create a unique name by adding a suffix
+                    counter = 1
+                    new_name = f"{field['name']}_{counter}"
+                    while (new_name, field["type"]) in seen_fields:
+                        counter += 1
                         new_name = f"{field['name']}_{counter}"
-                        while (new_name, field["type"]) in seen_fields:
-                            counter += 1
-                            new_name = f"{field['name']}_{counter}"
-                        
-                        field["name"] = new_name
-                        field["label"] = f"{field['label']} ({counter})"
-                        seen_fields.add((new_name, field["type"]))
-                        unique_fields.append(field)
-                        renamed_fields += 1
-                        print(f"🔄 Renamed duplicate field: {field['name']} -> {new_name}")
-            
-            # Final validation: ensure all field names are unique and properly formatted
-            final_fields = []
-            final_names = set()
-            
-            for field in unique_fields:
-                if field["name"] not in final_names:
-                    final_names.add(field["name"])
-                    final_fields.append(field)
-                else:
-                    print(f"⚠️ Final validation: duplicate field name found: {field['name']}")
-            
-            normalized = {"fields": final_fields}
-            print(f"✅ Successfully normalized {len(final_fields)} unique fields (removed {duplicates_removed} duplicates, merged {merged_fields}, renamed {renamed_fields})")
-            print(f"🔍 Final field names: {[f['name'] for f in final_fields]}")
-            return normalized
+                    
+                    field["name"] = new_name
+                    field["label"] = f"{field['label']} ({counter})"
+                    seen_fields.add((new_name, field["type"]))
+                    unique_fields.append(field)
+                    renamed_fields += 1
+                    print(f"🔄 Renamed duplicate field: {field['name']} -> {new_name}")
+        
+        # Final validation: ensure all field names are unique and properly formatted
+        final_fields = []
+        final_names = set()
+        
+        for field in unique_fields:
+            if field["name"] not in final_names:
+                final_names.add(field["name"])
+                final_fields.append(field)
+            else:
+                print(f"⚠️ Final validation: duplicate field name found: {field['name']}")
+        
+        normalized = {"fields": final_fields}
+        print(f"✅ Successfully normalized {len(final_fields)} unique fields (removed {duplicates_removed} duplicates, merged {merged_fields}, renamed {renamed_fields})")
+        print(f"🔍 Final field names: {[f['name'] for f in final_fields]}")
+        return normalized
 
         # Fallback if SEA-LION doesn’t return expected structure
         print("⚠️ SEA-LION returned empty or unexpected response")
@@ -680,77 +605,24 @@ class ExplainRequest(BaseModel):
 
 @app.post("/api/explain")
 async def explain_documents(request: ExplainRequest):
-    """Generate intelligent explanation of how retrieved documents relate to user's query"""
+    """Generate intelligent explanation of how retrieved documents relate to user's query (LangChain version)"""
     try:
-        api_key = os.getenv("SEA_LION_API_KEY")
-        if not api_key:
-            raise HTTPException(status_code=500, detail="SEA_LION_API_KEY not found")
-
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json"
-        }
-
-        # Build context for the LLM
-        doc_context = ""
-        for i, doc in enumerate(request.documents, 1):
-            doc_context += f"\nDocument {i}:\n"
-            doc_context += f"Title: {doc.get('title', 'No title')}\n"
-            doc_context += f"Content: {doc.get('content', 'No content')[:500]}...\n"
-            doc_context += f"URL: {doc.get('url', 'No URL')}\n"
-            doc_context += f"Relevance: {doc.get('similarity', 'Unknown')}\n"
-
-        system_prompt = f"""You are an expert government services advisor. Your task is to analyze how retrieved documents relate to the user's query and explain their relevance.
-
-IMPORTANT: Generate a response in {request.language} that:
-1. Shows you understand the user's issue/question
-2. Explains how each document relates to their query
-3. Highlights which documents are most helpful and why
-4. Provides context on how these documents can help solve their problem
-5. Is conversational and helpful
-
-BE PROACTIVE: After explaining the documents, ask 1-2 follow-up questions to better understand their specific situation:
-- Ask about their timeline, specific circumstances, or documents they have
-- Gather details that will help provide more targeted assistance
-- Show you're invested in solving their complete problem
-
-Document type: {request.document_type}
-User query: {request.user_query}
-
-Available documents:
-{doc_context}
-
-Respond in a helpful, conversational tone in {request.language}. End with 1-2 specific follow-up questions to gather more context."""
-
-        messages = [{"role": "system", "content": system_prompt}]
-
-        payload = {
-            "max_completion_tokens": 800,
-            "messages": messages,
-            "model": "aisingapore/Llama-SEA-LION-v3-70B-IT",
-            "temperature": 0.3,
-        }
-
-        response = requests.post(
-            "https://api.sea-lion.ai/v1/chat/completions",
-            headers=headers,
-            json=payload,
-            timeout=60
+        # Get LangChain RAG handler
+        rag_chain = get_rag_chain()
+        
+        print(f"DEBUG: Document explanation - query: {request.user_query}, docs: {len(request.documents)}")
+        
+        # Process document explanation through LangChain pipeline
+        result = rag_chain.explain_documents(
+            user_query=request.user_query,
+            documents=request.documents,
+            document_type=request.document_type,
+            country=request.country,
+            language=request.language
         )
-
-        if response.status_code != 200:
-            raise HTTPException(status_code=response.status_code, detail="SEA-LION API error")
-
-        response_data = response.json()
-        explanation = response_data["choices"][0]["message"]["content"].strip()
-
-        return {
-            "explanation": explanation,
-            "document_type": request.document_type,
-            "documents": request.documents,
-            "user_query": request.user_query
-        }
-
+        
+        return result
+        
     except Exception as e:
         print("💥 Exception in explain_documents:", e)
         raise HTTPException(status_code=500, detail=str(e))
@@ -814,94 +686,22 @@ def try_parse_json(text: str):
 
 @app.post("/api/fillForm")
 async def fill_form(request: FillFormRequest):
+    """Fill form using LangChain (migrated from direct API calls)"""
     try:
-        # Validate request size
-        if len(request.chat_history) > 50:
-            raise HTTPException(status_code=400, detail="Chat history too long. Please keep conversations shorter.")
+        # Get LangChain form processing handler
+        form_chain = get_form_chain()
         
-        if not request.form_schema or not request.form_schema.get('fields'):
-            raise HTTPException(status_code=400, detail="Invalid form schema")
+        print(f"🚀 fillForm: Processing form with {len(request.chat_history)} chat messages, {len(request.form_schema.get('fields', []))} fields")
         
-        api_key = os.getenv("SEA_LION_API_KEY")
-        if not api_key:
-            raise HTTPException(status_code=500, detail="SEA_LION_API_KEY not found")
-
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json"
-        }
-
-        # --- Enhanced system prompt for better field mapping ---
-        system_prompt = """You are SEA-LION helping fill government forms. 
-
-IMPORTANT INSTRUCTIONS:
-1. Analyze the chat history to find personal information
-2. Map that information to the form fields by name
-3. For each field, either provide the value found in chat OR "ASK_USER" if unclear
-4. Look for: names, addresses, dates, phone numbers, occupations, etc.
-5. Output ONLY valid JSON: {"fields": [{"name": "field_name", "value": "value_or_ASK_USER"}]}
-
-EXAMPLES:
-- If chat says "My name is John Smith" and form has field "name" → {"name": "name", "value": "John Smith"}
-- If chat says "I live in Hanoi" and form has field "address" → {"name": "address", "value": "Hanoi"}
-- If no info found for a field → {"name": "field_name", "value": "ASK_USER"}
-
-No explanations, no markdown, just JSON."""
-
-        messages = [{"role": "system", "content": system_prompt}]
-        for msg in request.chat_history:
-            if msg.get("role") in ["user", "assistant"] and msg.get("content"):
-                messages.append({"role": msg["role"], "content": msg["content"]})
-
-        messages.append({
-            "role": "user",
-            "content": f"Here is the form schema: {request.form_schema}"
-        })
-
-        # Limit chat history to last 10 messages to reduce processing time
-        limited_messages = messages[:11]  # system + last 10 messages
-        
-        payload = {
-            "max_completion_tokens": 300,   # reduced for faster response
-            "messages": limited_messages,
-            "model": "aisingapore/Llama-SEA-LION-v3-70B-IT",
-            "temperature": 0.1,  # lower temperature for more consistent output
-        }
-
-        print(f"🚀 fillForm: Sending request with {len(limited_messages)} messages, {len(request.form_schema.get('fields', []))} fields")
-        print(f"📋 Form fields: {[f.get('name', 'unknown') for f in request.form_schema.get('fields', [])]}")
-        chat_summary = []
-        for msg in limited_messages[1:]:
-            role = msg.get('role', 'unknown')
-            content = msg.get('content', '')[:50]
-            chat_summary.append(f"{role}: {content}...")
-        print(f"💬 Chat messages: {chat_summary}")
-        
-        response = requests.post(
-            "https://api.sea-lion.ai/v1/chat/completions",
-            headers=headers,
-            json=payload,
-            timeout=45  # reduced timeout for faster failure detection
+        # Process form filling through LangChain pipeline
+        result = form_chain.fill_form(
+            form_schema=request.form_schema,
+            chat_history=request.chat_history
         )
-
-        if response.status_code != 200:
-            print(f"❌ SEA-LION API error: {response.status_code}")
-            raise HTTPException(status_code=response.status_code, detail="SEA-LION API error")
-
-        response_data = response.json()
-        raw_text = response_data["choices"][0]["message"]["content"].strip()
         
-        print(f"✅ fillForm: Received response in {len(raw_text)} characters")
-
-        # --- Robust parse ---
-        try:
-            result = try_parse_json(raw_text)
-            print(f"✅ fillForm: Successfully parsed JSON with {len(result.get('fields', []))} fields")
-            return result
-        except Exception as e:
-            print("❌ Final JSON parse failure:", e, raw_text)
-            raise HTTPException(status_code=500, detail="Invalid JSON from LLM")
-
+        print(f"✅ fillForm: Successfully processed form with {len(result.get('fields', []))} fields")
+        return result
+        
     except Exception as e:
         print("💥 Exception in fill_form:", e)
         raise HTTPException(status_code=500, detail=str(e))
