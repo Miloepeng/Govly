@@ -96,7 +96,7 @@ class FormProcessingChain:
 
         raise ValueError("Unable to parse JSON")
     
-    def fill_form(self, form_schema: Dict[str, Any], chat_history: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def fill_form(self, form_schema: Dict[str, Any], chat_history: List[Dict[str, Any]], user_profile: Dict[str, Any] = None) -> Dict[str, Any]:
         """Process form filling using LangChain pipeline"""
         
         # Validate input
@@ -110,6 +110,30 @@ class FormProcessingChain:
         limited_chat = chat_history[-10:] if len(chat_history) > 10 else chat_history
         limited_formatted_chat = self.format_chat_history(limited_chat)
         
+        # Format user profile for prompt
+        formatted_profile = ""
+        if user_profile:
+            profile_info = []
+            if user_profile.get('full_name'):
+                profile_info.append(f"Name: {user_profile['full_name']}")
+            if user_profile.get('email'):
+                profile_info.append(f"Email: {user_profile['email']}")
+            if user_profile.get('phone_number'):
+                profile_info.append(f"Phone: {user_profile['phone_number']}")
+            if user_profile.get('address'):
+                profile_info.append(f"Address: {user_profile['address']}")
+            if user_profile.get('id_number'):
+                profile_info.append(f"ID Number: {user_profile['id_number']}")
+            if user_profile.get('date_of_birth'):
+                profile_info.append(f"Date of Birth: {user_profile['date_of_birth']}")
+            if user_profile.get('nationality'):
+                profile_info.append(f"Nationality: {user_profile['nationality']}")
+            if user_profile.get('occupation'):
+                profile_info.append(f"Occupation: {user_profile['occupation']}")
+            
+            if profile_info:
+                formatted_profile = "User Profile Information:\n" + "\n".join(profile_info) + "\n\n"
+        
         # Create processing pipeline: prompt -> llm
         chain = self.form_filling_prompt | self.llm
         
@@ -117,7 +141,8 @@ class FormProcessingChain:
             # Run the pipeline
             result = chain.invoke({
                 "form_schema": form_schema,
-                "chat_history": limited_formatted_chat
+                "chat_history": limited_formatted_chat,
+                "user_profile": formatted_profile
             })
             
             # Parse the JSON response

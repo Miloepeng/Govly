@@ -1,6 +1,10 @@
 # Base requirements
 -r requirements.txt
 
+# Authentication dependencies
+supabase==2.0.2
+PyJWT>=2.8.0,<3.0.0
+
 # OCR dependencies
 pytesseract==0.3.10
 pdf2image==1.16.3

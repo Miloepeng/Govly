@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { CheckCircle, Clock, AlertCircle, Calendar, FileText, ArrowRight } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
+import { ApplicationService } from '../lib/applicationService';
 
 interface ApplicationProgress {
   applied: { date: string | null; completed: boolean };
@@ -17,63 +19,43 @@ interface Application {
 }
 
 export default function StatusPage() {
+  const { user, loading } = useAuth();
   const [applications, setApplications] = useState<Application[]>([]);
   const [filterStatus, setFilterStatus] = useState<string>('all');
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Load applications from localStorage
-    let savedApplications = JSON.parse(localStorage.getItem('applications') || '[]');
-    
-    // Add demo data if no applications exist
-    if (savedApplications.length === 0) {
-      const demoApplications = [
-        {
-          id: 'demo-1',
-          formTitle: 'Housing Application Form',
-          dateApplied: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(), // 7 days ago
-          status: 'reviewed',
-          formData: { name: 'John Doe', address: '123 Main St' },
-          schema: { fields: [] },
-          progress: {
-            applied: { date: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(), completed: true },
-            reviewed: { date: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(), completed: true },
-            confirmed: { date: null, completed: false }
-          }
-        },
-        {
-          id: 'demo-2',
-          formTitle: 'Business Registration Form',
-          dateApplied: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(), // 3 days ago
-          status: 'applied',
-          formData: { businessName: 'Tech Corp', owner: 'Jane Smith' },
-          schema: { fields: [] },
-          progress: {
-            applied: { date: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(), completed: true },
-            reviewed: { date: null, completed: false },
-            confirmed: { date: null, completed: false }
-          }
-        },
-        {
-          id: 'demo-3',
-          formTitle: 'Land Use Permit Application',
-          dateApplied: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString(), // 14 days ago
-          status: 'confirmed',
-          formData: { propertyAddress: '456 Oak Ave', purpose: 'Residential' },
-          schema: { fields: [] },
-          progress: {
-            applied: { date: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString(), completed: true },
-            reviewed: { date: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(), completed: true },
-            confirmed: { date: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(), completed: true }
-          }
+    const loadApplications = async () => {
+      if (!user) {
+        setIsLoading(false);
+        return;
+      }
+
+      try {
+        // First, try to migrate any localStorage applications
+        await ApplicationService.migrateLocalStorageApplications(user.id);
+        
+        // Then load applications from Supabase
+        const { data, error } = await ApplicationService.getUserApplications(user.id);
+        
+        if (error) {
+          // Fallback to localStorage if Supabase fails
+          const localApplications = JSON.parse(localStorage.getItem('applications') || '[]');
+          setApplications(localApplications);
+        } else {
+          setApplications(data || []);
         }
-      ];
-      
-      localStorage.setItem('applications', JSON.stringify(demoApplications));
-      savedApplications = demoApplications;
-    }
-    
-    setApplications(savedApplications);
-  }, []);
+      } catch (error) {
+        // Fallback to localStorage
+        const localApplications = JSON.parse(localStorage.getItem('applications') || '[]');
+        setApplications(localApplications);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadApplications();
+  }, [user]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -133,6 +115,34 @@ export default function StatusPage() {
     setApplications(updatedApplications);
     localStorage.setItem('applications', JSON.stringify(updatedApplications));
   };
+
+  if (loading || isLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading applications...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-gray-900 mb-4">Please Sign In</h1>
+          <p className="text-gray-600 mb-6">You need to sign in to view your applications.</p>
+          <button
+            onClick={() => window.location.href = '/dashboard'}
+            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            Go to Dashboard
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 py-8">

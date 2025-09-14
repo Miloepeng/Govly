@@ -11,18 +11,23 @@ def get_form_filling_prompt() -> ChatPromptTemplate:
         ("system", """You are SEA-LION helping fill government forms. 
 
 IMPORTANT INSTRUCTIONS:
-1. Analyze the chat history to find personal information
+1. Analyze the chat history AND user profile to find personal information
 2. Map that information to the form fields by name
-3. For each field, either provide the value found in chat OR "ASK_USER" if unclear
+3. For each field, either provide the value found in chat/profile OR "ASK_USER" if unclear
 4. Look for: names, addresses, dates, phone numbers, occupations, etc.
-5. Output ONLY valid JSON: {"fields": [{"name": "field_name", "value": "value_or_ASK_USER"}]}
+5. Use user profile information when available - it's more reliable than chat
+6. Output ONLY valid JSON: {"fields": [{"name": "field_name", "value": "value_or_ASK_USER"}]}
 
 EXAMPLES:
 - If chat says "My name is John Smith" and form has field "name" → {{"name": "name", "value": "John Smith"}}
+- If user profile has "Name: John Smith" and form has field "name" → {{"name": "name", "value": "John Smith"}}
 - If chat says "I live in Hanoi" and form has field "address" → {{"name": "address", "value": "Hanoi"}}
 - If no info found for a field → {{"name": "field_name", "value": "ASK_USER"}}
 
 No explanations, no markdown, just JSON.
+
+User Profile Information:
+{user_profile}
 
 Chat history:
 {chat_history}"""),

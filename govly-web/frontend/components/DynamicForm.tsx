@@ -1,5 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { ChevronLeft, ChevronRight, Search, ArrowLeft, ArrowRight } from "lucide-react";
+import { useAuth } from '../contexts/AuthContext';
+import { ApplicationService } from '../lib/applicationService';
+import { FormAutofillService } from '../lib/formAutofillService';
 
 interface Field {
   name: string;
@@ -19,18 +22,21 @@ export default function DynamicForm({
   externalUpdate,
   formState,
   chatHistory,
+  userProfile,
 }: {
   schema: Schema;
   onAskClarification?: (fieldName: string, label: string) => void;
   externalUpdate?: { field: string; value: string } | null;
   formState?: Record<string, any>[];
   chatHistory?: Array<{ role: string; content: string }>;
+  userProfile?: any; // UserProfile from AuthContext
 }) {
-  console.log("DynamicForm received schema:", schema);
+  const { user, profile } = useAuth();
   const [formData, setFormData] = useState<Record<string, any>>({});
   const [currentFieldIndex, setCurrentFieldIndex] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<{ field: string; value: string }[]>([]);
+  const [autofillSuggestions, setAutofillSuggestions] = useState<Record<string, string>>({});
 
   // When parent sends formState, sync it in
   useEffect(() => {
@@ -42,6 +48,14 @@ export default function DynamicForm({
       setFormData(mapped);
     }
   }, [formState]);
+
+  // Generate autofill suggestions when profile or schema changes
+  useEffect(() => {
+    if (profile && schema.fields) {
+      const suggestions = FormAutofillService.getAutofillSuggestions(schema.fields, profile);
+      setAutofillSuggestions(suggestions);
+    }
+  }, [profile, schema]);
 
   // Apply external updates from parent (chat answers)
   useEffect(() => {
@@ -69,16 +83,22 @@ export default function DynamicForm({
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (!user) {
+      alert("Please sign in to submit applications.");
+      return;
+    }
     
     // Create application object
     const application = {
       id: Date.now().toString(),
       formTitle: schema.fields[0]?.label || "Government Form",
       dateApplied: new Date().toISOString(),
-      status: "applied",
+      status: "applied" as const,
       formData: formData,
+      schema: schema,
       progress: {
         applied: { date: new Date().toISOString(), completed: true },
         reviewed: { date: null, completed: false },
@@ -86,13 +106,19 @@ export default function DynamicForm({
       }
     };
 
-    // Save to localStorage
-    const existingApplications = JSON.parse(localStorage.getItem('applications') || '[]');
-    existingApplications.push(application);
-    localStorage.setItem('applications', JSON.stringify(existingApplications));
+    try {
+      // Save to Supabase
+      const { error } = await ApplicationService.saveApplication(user.id, application);
+      
+      if (error) {
+        alert("Failed to save application. Please try again.");
+        return;
+      }
 
-    console.log("✅ Application saved:", application);
-    alert("Application submitted and saved! You can track it on the Status page.");
+      alert("Application submitted and saved! You can track it on the Status page.");
+    } catch (error) {
+      alert("Failed to save application. Please try again.");
+    }
   };
 
   const goToNextField = () => {
@@ -189,9 +215,13 @@ export default function DynamicForm({
         });
       }
 
+      // Get user profile data for AI context
+      const profileData = profile || userProfile;
+      
       console.log("🤖 Sending to AI autofill:", {
         form_schema: schema,
         chat_history: filteredHistory,
+        user_profile: profileData,
         chatHistoryLength: filteredHistory.length,
         schemaFieldsCount: schema.fields?.length || 0
       });
@@ -206,6 +236,7 @@ export default function DynamicForm({
         body: JSON.stringify({
           form_schema: schema,
           chat_history: filteredHistory,
+          user_profile: profileData,
         }),
         signal: controller.signal,
       });
@@ -365,6 +396,19 @@ export default function DynamicForm({
           
           {currentField.description && (
             <p className="text-blue-700 mb-4 text-sm">{currentField.description}</p>
+          )}
+
+          {/* Autofill Button */}
+          {autofillSuggestions[currentField.name] && !formData[currentField.name] && (
+            <div className="mb-3">
+              <button
+                type="button"
+                onClick={() => handleChange(currentField.name, autofillSuggestions[currentField.name])}
+                className="text-sm text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-3 py-1 rounded-lg transition-colors"
+              >
+                ✨ Autofill: {autofillSuggestions[currentField.name]}
+              </button>
+            </div>
           )}
 
           {/* Field Input */}

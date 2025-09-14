@@ -1,6 +1,9 @@
 import { useState } from 'react';
 import { useRouter } from 'next/router';
-import { Home, Building2, Heart, GraduationCap, Car, Users } from 'lucide-react';
+import { Home, Building2, Heart, GraduationCap, Car, Users, LogIn, User, LogOut } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
+import AuthModal from '../components/AuthModal';
+import UserProfile from '../components/UserProfile';
 
 interface CategoryCardProps {
   title: string;
@@ -50,6 +53,10 @@ function CategoryCard({ title, description, icon, isAvailable, category, onClick
 
 export default function Dashboard() {
   const router = useRouter();
+  const { user, profile, signOut } = useAuth();
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin');
+  const [showUserProfile, setShowUserProfile] = useState(false);
 
   const categories = [
     {
@@ -124,6 +131,39 @@ export default function Dashboard() {
               >
                 View Applications
               </button>
+              
+              {user ? (
+                <div className="flex items-center gap-2">
+                  <div className="text-right">
+                    <p className="text-sm font-medium text-gray-900">
+                      {profile?.full_name || user.email}
+                    </p>
+                    <p className="text-xs text-gray-500">Welcome back!</p>
+                  </div>
+                  <button
+                    onClick={() => setShowUserProfile(true)}
+                    className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+                    title="View Profile"
+                  >
+                    <User className="w-5 h-5" />
+                  </button>
+                  <button
+                    onClick={signOut}
+                    className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+                    title="Sign Out"
+                  >
+                    <LogOut className="w-5 h-5" />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setShowAuthModal(true)}
+                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
+                >
+                  <LogIn className="w-4 h-4" />
+                  Sign In
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -169,6 +209,19 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
+
+      {/* Auth Modal */}
+      <AuthModal
+        isOpen={showAuthModal}
+        onClose={() => setShowAuthModal(false)}
+        mode={authMode}
+        onModeChange={setAuthMode}
+      />
+
+      {/* User Profile Modal */}
+      {showUserProfile && (
+        <UserProfile onClose={() => setShowUserProfile(false)} />
+      )}
     </div>
   );
 }

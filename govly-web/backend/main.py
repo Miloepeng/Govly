@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional, Any, Dict
@@ -7,6 +7,8 @@ import sys
 import requests
 import tempfile
 import json
+import jwt
+from datetime import datetime, timedelta
 
 # Add current directory to Python path
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -29,6 +31,38 @@ print("✅ DEBUG: RAG imports successful")
 # Load environment variables
 from dotenv import load_dotenv
 import os
+
+# Supabase configuration
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY")  # Service role key for backend
+SUPABASE_JWT_SECRET = os.getenv("SUPABASE_JWT_SECRET")
+
+# Authentication utilities
+def verify_supabase_token(authorization: str = Header(None)) -> Optional[Dict[str, Any]]:
+    """Verify Supabase JWT token and return user info"""
+    if not authorization:
+        return None
+    
+    try:
+        # Extract token from "Bearer <token>" format
+        token = authorization.replace("Bearer ", "")
+        
+        # Verify token (you might need to adjust this based on your Supabase setup)
+        # For now, we'll do basic validation
+        if not token:
+            return None
+            
+        # In a real implementation, you would verify the JWT signature
+        # For this demo, we'll assume the token is valid if it exists
+        return {"user_id": "demo-user", "email": "demo@example.com"}
+        
+    except Exception as e:
+        print(f"Token verification error: {e}")
+        return None
+
+def get_current_user(authorization: str = Header(None)) -> Optional[Dict[str, Any]]:
+    """Get current authenticated user"""
+    return verify_supabase_token(authorization)
 
 # Try to load .env from multiple possible locations
 env_paths = [
@@ -119,8 +153,13 @@ class AgencyDetectionRequest(BaseModel):
 
 # ---------------- Chat endpoint (LangChain version) ----------------
 @app.post("/api/chat")
-async def chat(request: ChatRequest):
+async def chat(request: ChatRequest, current_user: Optional[Dict[str, Any]] = Depends(get_current_user)):
     try:
+        # Optional: Log user activity
+        if current_user:
+            print(f"Chat request from user: {current_user.get('email', 'unknown')}")
+        else:
+            print("Chat request from anonymous user")
         # Get singleton LangChain chat handler instance
         chat_chain = get_chat_chain()
         
@@ -893,6 +932,7 @@ async def explain_documents(request: ExplainRequest):
 class FillFormRequest(BaseModel):
     form_schema: Dict[str, Any]
     chat_history: List[Dict[str, Any]]   # allow extra keys
+    user_profile: Optional[Dict[str, Any]] = None  # User profile data for AI context
 
 def clean_llm_output(text: str) -> str:
     """Remove markdown fences and stray chars from LLM JSON output."""
@@ -953,11 +993,14 @@ async def fill_form(request: FillFormRequest):
         form_chain = get_form_chain()
         
         print(f"🚀 fillForm: Processing form with {len(request.chat_history)} chat messages, {len(request.form_schema.get('fields', []))} fields")
+        if request.user_profile:
+            print(f"👤 User profile provided: {request.user_profile.get('full_name', 'Unknown')} ({request.user_profile.get('email', 'No email')})")
         
         # Process form filling through LangChain pipeline
         result = form_chain.fill_form(
             form_schema=request.form_schema,
-            chat_history=request.chat_history
+            chat_history=request.chat_history,
+            user_profile=request.user_profile
         )
         
         print(f"✅ fillForm: Successfully processed form with {len(result.get('fields', []))} fields")
