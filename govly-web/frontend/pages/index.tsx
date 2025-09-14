@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { useRouter } from 'next/router';
 import { Bot, Sparkles, Search, FileText, Check } from 'lucide-react';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { GearIcon, PaperPlaneIcon } from '@radix-ui/react-icons';
@@ -8,6 +9,7 @@ import { Message } from '../types/chat';
 import DynamicForm from '../components/DynamicForm';
 
 export default function Home() {
+  const router = useRouter();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -68,6 +70,22 @@ export default function Home() {
       messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   };
+
+  // Handle category parameter from URL or redirect to dashboard if no category
+  useEffect(() => {
+    if (router.isReady) {
+      if (router.query.category) {
+        const category = router.query.category as string;
+        if (category === 'housing' || category === 'business') {
+          setSelectedCategory(category);
+          console.log('Category set from URL:', category);
+        }
+      } else {
+        // If no category parameter, redirect to dashboard
+        router.replace('/dashboard');
+      }
+    }
+  }, [router.isReady, router.query.category, router]);
 
   // Simple auto-scroll: scroll to bottom whenever messages change
   useEffect(() => {
@@ -162,12 +180,13 @@ export default function Home() {
     if (savedButton && (savedButton === 'smart' || savedButton === 'ragLink' || savedButton === 'ragForm')) {
       setSelectedButton(savedButton as 'smart' | 'ragLink' | 'ragForm');
     }
-    if (savedCategory && (savedCategory === 'housing' || savedCategory === 'business')) {
+    // Only restore category from localStorage if no URL parameter is present
+    if (!router.query.category && savedCategory && (savedCategory === 'housing' || savedCategory === 'business')) {
       setSelectedCategory(savedCategory as 'housing' | 'business');
     }
 
     console.log("✅ Restored user preferences from localStorage");
-  }, []); // Empty dependency array - only run once on mount
+  }, [router.isReady, router.query.category]); // Run when router is ready or category changes
 
   // Save chat history to localStorage whenever messages change
   useEffect(() => {
@@ -252,7 +271,7 @@ export default function Home() {
         category: selectedCategory
       }
     };
-    console.log('DEBUG: Sending request with country:', selectedCountry, 'language:', selectedLanguage);
+    console.log('DEBUG: Sending request with country:', selectedCountry, 'language:', selectedLanguage, 'category:', selectedCategory);
     console.log('DEBUG: Selected button type:', selectedButton);
     console.log('DEBUG: Full request body:', requestBody);
     console.log('DEBUG: Sending to endpoint:', '/api/smartChat');
@@ -439,8 +458,8 @@ export default function Home() {
             formResults: formResults
           }
         };
-        console.log('DEBUG: Sending RAG request with country:', selectedCountry, 'language:', selectedLanguage);
-        console.log('DEBUG: Full RAG request body:', aiRequestBody);
+            console.log('DEBUG: Sending RAG request with country:', selectedCountry, 'language:', selectedLanguage, 'category:', selectedCategory);
+            console.log('DEBUG: Full RAG request body:', aiRequestBody);
         
         const aiResponse = await fetch('/api/smartChat', {
           method: 'POST',
@@ -598,6 +617,14 @@ export default function Home() {
         {/* Header */}
         <div className="px-6 py-4 bg-gray-50">
           <div className="flex items-center justify-between">
+            {/* Category indicator */}
+            {selectedCategory && (
+              <div className="flex items-center gap-2 px-3 py-1 bg-blue-100 text-blue-800 rounded-lg text-sm font-medium">
+                <span className="capitalize">{selectedCategory}</span>
+                <span>Services</span>
+              </div>
+            )}
+            
             {/* Country, Language, and Category dropdowns */}
             <div className="flex items-center gap-3">
               {/* Country dropdown */}

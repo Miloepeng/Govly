@@ -41,7 +41,19 @@ export default function Sidebar({ settings, onSettingsChange }: SidebarProps) {
           {/* Navigation */}
           <nav className="space-y-3">
             <a
-              href="#"
+              href="/dashboard"
+              className="flex items-center gap-3 px-3 py-3 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 hover:border-blue-300 hover:bg-blue-50 transition-colors"
+            >
+              <div className="w-10 h-10 flex items-center justify-center">
+                <svg className="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5a2 2 0 012-2h4a2 2 0 012 2v2H8V5z" />
+                </svg>
+              </div>
+              <span className="text-gray-800 text-sm">Dashboard</span>
+            </a>
+            <a
+              href="/"
               className="flex items-center gap-3 px-3 py-3 rounded-xl border border-gray-200 bg-white hover:bg-gray-50"
             >
               <div className="w-10 h-10 flex items-center justify-center">
@@ -78,8 +90,19 @@ export default function Sidebar({ settings, onSettingsChange }: SidebarProps) {
           {/* Centered navigation icons */}
           <nav className="flex flex-col items-center space-y-4 mt-8">
             <a
-              href="#"
+              href="/dashboard"
+              className="w-10 h-10 flex items-center justify-center rounded-xl border border-gray-200 bg-white hover:bg-gray-50 hover:border-blue-300 hover:bg-blue-50 transition-colors"
+              title="Dashboard"
+            >
+              <svg className="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5a2 2 0 012-2h4a2 2 0 012 2v2H8V5z" />
+              </svg>
+            </a>
+            <a
+              href="/"
               className="w-10 h-10 flex items-center justify-center rounded-xl border border-gray-200 bg-white hover:bg-gray-50"
+              title="Chat"
             >
               <ChatBubbleIcon className="w-5 h-5 text-gray-700" />
             </a>
