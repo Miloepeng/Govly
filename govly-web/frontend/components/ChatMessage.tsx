@@ -105,10 +105,10 @@ export default function ChatMessage({
     if (!selectedForm?.url) return;
 
     try {
-      const response = await fetch('/api/extractFormPreprocessed', {
+      const response = await fetch('/api/extractFormById', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: selectedForm.url }),
+        body: JSON.stringify({ form_id: selectedForm.id }),
       });
       if (response.ok) {
         const data = await response.json();
@@ -205,10 +205,10 @@ export default function ChatMessage({
                         setExtractedFormSchema(null);
                         
                         try {
-                          const response = await fetch('http://localhost:8000/api/extractFormPreprocessed', {
+                          const response = await fetch('http://localhost:8000/api/extractFormById', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ url: result.url }),
+                            body: JSON.stringify({ form_id: result.id }),
                           });
                           if (response.ok) {
                             const data = await response.json();

@@ -484,7 +484,39 @@ class FormPreprocessor:
         return '\n'.join(text_lines)
     
     def extract_form_fields(self, blocks: List[Dict]) -> List[Dict[str, Any]]:
-        """Extract form fields from Textract blocks."""
+        """Extract form fields from Textract blocks using multiple strategies."""
+        form_fields = []
+        
+        # Strategy 1: Extract key-value pairs (existing method)
+        kv_fields = self.extract_key_value_fields(blocks)
+        form_fields.extend(kv_fields)
+        
+        # Strategy 2: Extract form labels and input areas
+        label_fields = self.extract_form_labels(blocks)
+        form_fields.extend(label_fields)
+        
+        # Strategy 3: Extract table-based form fields
+        table_fields = self.extract_table_form_fields(blocks)
+        form_fields.extend(table_fields)
+        
+        # Remove duplicates based on field name
+        seen = set()
+        unique_fields = []
+        for field in form_fields:
+            field_name = field['name']
+            if field_name not in seen:
+                seen.add(field_name)
+                unique_fields.append(field)
+        
+        print(f"📋 Extracted {len(unique_fields)} unique form fields:")
+        print(f"   - Key-value pairs: {len(kv_fields)}")
+        print(f"   - Form labels: {len(label_fields)}")
+        print(f"   - Table fields: {len(table_fields)}")
+        
+        return unique_fields
+    
+    def extract_key_value_fields(self, blocks: List[Dict]) -> List[Dict]:
+        """Extract key-value pairs from Textract blocks."""
         form_fields = []
         
         # Find all key-value pairs
@@ -523,6 +555,122 @@ class FormPreprocessor:
                     })
         
         return form_fields
+    
+    def extract_form_labels(self, blocks: List[Dict]) -> List[Dict]:
+        """Extract form labels and input areas from blocks."""
+        form_fields = []
+        
+        # Look for text blocks that might be form labels
+        text_blocks = [block for block in blocks if block.get('BlockType') == 'LINE']
+        
+        for text_block in text_blocks:
+            text = self.get_text_from_block(text_block, blocks).strip()
+            if not text:
+                continue
+            
+            # Check if this looks like a form field label
+            if self.looks_like_form_field(text):
+                confidence = text_block.get('Confidence', 0)
+                field_type = self.determine_field_type(text)
+                
+                form_fields.append({
+                    "name": self.clean_field_name(text),
+                    "label": text,
+                    "value": "",  # Empty for form filling
+                    "type": field_type,
+                    "confidence": confidence,
+                    "required": self.is_required_field(text),
+                    "description": f"Form label: {text}"
+                })
+        
+        return form_fields
+    
+    def extract_table_form_fields(self, blocks: List[Dict]) -> List[Dict]:
+        """Extract form fields from tables."""
+        form_fields = []
+        
+        # Find table blocks
+        table_blocks = [block for block in blocks if block.get('BlockType') == 'TABLE']
+        
+        for table_block in table_blocks:
+            # Extract cells from table
+            if 'Relationships' in table_block:
+                for relationship in table_block['Relationships']:
+                    if relationship.get('Type') == 'CHILD':
+                        cell_ids = relationship.get('Ids', [])
+                        cells = [block for block in blocks if block.get('Id') in cell_ids and block.get('BlockType') == 'CELL']
+                        
+                        for cell in cells:
+                            cell_text = self.get_text_from_block(cell, blocks).strip()
+                            if cell_text and self.looks_like_form_field(cell_text):
+                                confidence = cell.get('Confidence', 0)
+                                field_type = self.determine_field_type(cell_text)
+                                
+                                form_fields.append({
+                                    "name": self.clean_field_name(cell_text),
+                                    "label": cell_text,
+                                    "value": "",  # Empty for form filling
+                                    "type": field_type,
+                                    "confidence": confidence,
+                                    "required": self.is_required_field(cell_text),
+                                    "description": f"Table field: {cell_text}"
+                                })
+        
+        return form_fields
+    
+    def looks_like_form_field(self, text: str) -> bool:
+        """Check if text looks like a form field label."""
+        if not text or len(text.strip()) < 2:
+            return False
+        
+        text_lower = text.lower().strip()
+        
+        # Common Vietnamese form field patterns
+        form_patterns = [
+            'họ và tên', 'tên', 'họ tên', 'full name',
+            'ngày sinh', 'date of birth', 'dob',
+            'địa chỉ', 'address',
+            'số điện thoại', 'phone', 'tel', 'điện thoại',
+            'email', 'e-mail', 'thư điện tử',
+            'cmnd', 'cccd', 'id', 'identity', 'chứng minh',
+            'nghề nghiệp', 'occupation', 'job', 'công việc',
+            'nơi sinh', 'place of birth',
+            'quốc tịch', 'nationality',
+            'giới tính', 'gender', 'sex',
+            'ngày', 'date', 'thời gian',
+            'ký tên', 'signature', 'chữ ký',
+            'ghi chú', 'note', 'comment',
+            'lý do', 'reason',
+            'mục đích', 'purpose',
+            'yêu cầu', 'request',
+            'đề nghị', 'proposal',
+            'xác nhận', 'confirm',
+            'kính gửi', 'gửi',
+            'tôi là', 'tôi',
+            'ngôi nhà', 'nhà',
+            'đất', 'land', 'property',
+            'hợp pháp', 'legal',
+            'tình trạng', 'status', 'condition',
+            'xác nhận', 'confirmation'
+        ]
+        
+        # Check if text contains any form field patterns
+        for pattern in form_patterns:
+            if pattern in text_lower:
+                return True
+        
+        # Check if text ends with colon (common in forms)
+        if text.strip().endswith(':'):
+            return True
+        
+        # Check if text is short and contains common form words
+        if len(text.split()) <= 5:  # Short phrases
+            form_words = ['tên', 'ngày', 'địa chỉ', 'số', 'điện thoại', 'email', 'cmnd', 'cccd']
+            for word in form_words:
+                if word in text_lower:
+                    return True
+        
+        return False
     
     def extract_tables(self, blocks: List[Dict]) -> List[Dict]:
         """Extract tables from Textract blocks."""

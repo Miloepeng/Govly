@@ -384,11 +384,11 @@ export default function Home() {
                 formResults = formData.results;
 
                 if (formResults.length > 0) {
-                  // 👇 Call extractFormPreprocessed on the first result
-                  const extractResponse = await fetch('/api/extractFormPreprocessed', {
+                  // 👇 Call extractFormById on the first result
+                  const extractResponse = await fetch('/api/extractFormById', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ url: formResults[0].url })
+                    body: JSON.stringify({ form_id: formResults[0].id })
                   });
 
                   if (extractResponse.ok) {

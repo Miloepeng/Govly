@@ -109,6 +109,9 @@ class FormRequest(BaseModel):
 class ExtractFormRequest(BaseModel):
     url: str
 
+class ExtractFormByIdRequest(BaseModel):
+    form_id: int
+
 class AgencyDetectionRequest(BaseModel):
     query: str
     country: str
@@ -598,6 +601,40 @@ async def extract_form(request: ExtractFormRequest):
         print("💥 Exception in extract_form:", e)
         raise HTTPException(status_code=500, detail=str(e))
 
+def extract_filename_from_url(url: str) -> str:
+    """Extract filename from URL, handling Windows paths and various URL formats."""
+    try:
+        # Remove any URL prefix
+        if url.startswith('http://') or url.startswith('https://'):
+            # Extract path from URL
+            from urllib.parse import urlparse
+            parsed = urlparse(url)
+            path = parsed.path
+        else:
+            path = url
+        
+        # Handle Windows paths that might be in the URL
+        if '\\' in path:
+            # Split by backslashes and take the last part
+            filename = path.split('\\')[-1]
+        else:
+            # Split by forward slashes and take the last part
+            filename = path.split('/')[-1]
+        
+        # Clean up the filename
+        filename = filename.strip()
+        
+        # If it's still empty or contains path separators, try os.path.basename
+        if not filename or '/' in filename or '\\' in filename:
+            filename = os.path.basename(path)
+        
+        return filename
+        
+    except Exception as e:
+        print(f"⚠️ Error extracting filename from URL {url}: {e}")
+        # Fallback to simple basename
+        return os.path.basename(url)
+
 @app.post("/api/extractFormPreprocessed")
 async def extract_form_preprocessed(request: ExtractFormRequest):
     """Extract form fields using preprocessed data from database."""
@@ -605,8 +642,8 @@ async def extract_form_preprocessed(request: ExtractFormRequest):
         pdf_url = request.url
         print(f"📥 Received form path/url: {pdf_url}")
 
-        # Resolve filename and map to backend/forms
-        filename = os.path.basename(pdf_url)
+        # Extract filename from URL (handles Windows paths)
+        filename = extract_filename_from_url(pdf_url)
         print(f"🔍 Looking for preprocessed form: {filename}")
 
         # Try to get preprocessed form data from database
@@ -661,14 +698,75 @@ async def extract_form_preprocessed(request: ExtractFormRequest):
         print("💥 Exception in extract_form_preprocessed:", e)
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/api/extractFormById")
+async def extract_form_by_id(request: ExtractFormByIdRequest):
+    """Extract form fields using preprocessed data by form ID."""
+    try:
+        form_id = request.form_id
+        print(f"🔍 Looking for preprocessed form ID: {form_id}")
+
+        # Get preprocessed form data from database
+        form_data = get_form_by_id(form_id)
+        
+        if not form_data:
+            raise HTTPException(status_code=404, detail=f"Form with ID {form_id} not found")
+        
+        if not form_data.get('form_fields'):
+            raise HTTPException(status_code=404, detail=f"No form fields found for form ID {form_id}")
+        
+        print(f"✅ Found preprocessed form data!")
+        print(f"   Form ID: {form_data['id']}")
+        print(f"   Title: {form_data['title']}")
+        print(f"   Fields: {form_data['field_count']}")
+        print(f"   Processing method: {form_data['processing_status']}")
+        
+        # Convert preprocessed form fields to the expected format
+        preprocessed_fields = form_data['form_fields']
+        
+        if isinstance(preprocessed_fields, dict) and 'fields' in preprocessed_fields:
+            # New format with fields array
+            fields_list = preprocessed_fields['fields']
+        elif isinstance(preprocessed_fields, list):
+            # Direct list format
+            fields_list = preprocessed_fields
+        else:
+            raise HTTPException(status_code=500, detail="Unexpected form_fields format")
+        
+        # Convert to the format expected by the frontend
+        converted_fields = []
+        for field in fields_list:
+            converted_field = {
+                "name": field.get("name", "unnamed_field"),
+                "type": field.get("type", "text"),
+                "label": field.get("label", field.get("name", "Unnamed field")),
+                "required": field.get("required", False),
+                "description": field.get("description", ""),
+                "confidence": field.get("confidence", 0)
+            }
+            
+            # Add value if it exists (for pre-filled forms)
+            if "value" in field:
+                converted_field["value"] = field["value"]
+            
+            converted_fields.append(converted_field)
+        
+        print(f"✅ Converted {len(converted_fields)} preprocessed fields")
+        return {"fields": converted_fields}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print("💥 Exception in extract_form_by_id:", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
 async def extract_form_fallback(request: ExtractFormRequest):
     """Fallback to OCR processing when preprocessed data is not available."""
     try:
         pdf_url = request.url
         print(f"🔄 Using OCR fallback for: {pdf_url}")
 
-        # Resolve filename and map to backend/forms
-        filename = os.path.basename(pdf_url)
+        # Extract filename from URL (handles Windows paths)
+        filename = extract_filename_from_url(pdf_url)
         forms_dir = os.path.join(current_dir, "forms")
         tmp_pdf_path = os.path.join(forms_dir, filename)
 
