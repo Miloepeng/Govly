@@ -205,7 +205,7 @@ export default function ChatMessage({
                         setExtractedFormSchema(null);
                         
                         try {
-                          const response = await fetch('http://localhost:8000/api/extractFormById', {
+                          const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/extractFormById`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ form_id: result.id }),

@@ -16,6 +16,7 @@ export interface RAGResult {
 }
 
 export interface FormResult {
+  id: number;
   title: string;
   description?: string;
   url: string;
