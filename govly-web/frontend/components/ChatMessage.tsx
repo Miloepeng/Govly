@@ -104,6 +104,8 @@ export default function ChatMessage({
   const handleFillForm = async () => {
     if (!selectedForm?.url) return;
 
+    setIsLoadingForm(true);
+
     try {
       const response = await fetch('/api/extractFormById', {
         method: 'POST',
@@ -114,13 +116,19 @@ export default function ChatMessage({
         const data = await response.json();
         console.log("✅ extractFormPreprocessed response:", data);
 
-        // ✅ Only update sidebar form schema now
+        // Set the extracted form schema for display
+        setExtractedFormSchema(data);
+        // Also update sidebar form schema
         if (setFormSchema) setFormSchema(data);
       } else {
         console.error('Failed to extract form');
       }
     } catch (err) {
       console.error('Error extracting form:', err);
+    } finally {
+      if (!extractedFormSchema) {
+        setIsLoadingForm(false);
+      }
     }
   };
 
@@ -128,8 +136,8 @@ export default function ChatMessage({
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-4`}>
       <div className={`max-w-4xl ${isUser ? 'order-2' : 'order-1'}`}>
         {isUser ? (
-          <div className="bg-blue-600 text-white px-4 py-3 rounded-2xl shadow-sm">
-            <p className="text-white">{message.content}</p>
+          <div className="bg-rose-50 border border-rose-200 text-rose-800 px-4 py-3 rounded-2xl shadow-sm">
+            <p className="text-rose-900">{message.content}</p>
           </div>
         ) : (
           <div className="w-full">
@@ -148,107 +156,197 @@ export default function ChatMessage({
             />
 
             {/* --- Document Results --- */}
-            {showRAGResults && (message.ragResults?.length ?? 0) > 0 && (
-              <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                <h4 className="text-sm font-semibold text-blue-800 mb-3 flex items-center">
-                  📚 Relevant Policies & Documents
-                </h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {message.ragResults?.map((result, index) => (
-                    <div
-                      key={index}
-                      className="rag-card p-4 cursor-pointer hover:shadow-md transition-shadow"
-                      onClick={() => console.log('Document clicked:', result.title)}
-                    >
-                      <div className="flex items-start justify-between mb-2">
-                        <h5 className="font-medium text-gray-900 line-clamp-2 flex-1">
-                          📄 {result.title}
-                        </h5>
-                        <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">
-                          Policy
-                        </span>
-                      </div>
-                      <p className="text-sm text-gray-600 line-clamp-3 mb-3">
-                        {result.content}
-                      </p>
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="text-gray-500">Relevance: {result.similarity?.toFixed(3)}</span>
-                        <a
-                          href={result.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-blue-600 hover:text-blue-800 truncate"
-                        >
-                          📖 Read Full
-                        </a>
+            {showRAGResults && message.ragResults && message.ragResults.length > 0 && (
+              <div className="mt-6 space-y-4">
+                {/* Best Match Document */}
+                {message.ragResults[0] && (
+                  <div className="p-5 bg-blue-50 border-2 border-blue-200 rounded-xl shadow-sm">
+                    <h4 className="text-sm font-semibold text-blue-800 mb-3 flex items-center gap-2">
+                      ⭐️ Best Matching Policy
+                    </h4>
+                    <div className="bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow">
+                      <div
+                        key="best-match"
+                        className="p-5 cursor-pointer"
+                        onClick={() => {
+                          const bestMatch = message.ragResults?.[0];
+                          if (!bestMatch) return;
+                          window.open(bestMatch.url, '_blank');
+                        }}
+                      >
+                        <div className="flex items-start justify-between mb-3">
+                          <h5 className="text-lg font-semibold text-gray-900 line-clamp-2 flex-1">
+                            📄 {message.ragResults[0].title}
+                          </h5>
+                          <span className="text-xs bg-blue-100 text-blue-800 px-3 py-1.5 rounded-full font-medium">
+                            Recommended
+                          </span>
+                        </div>
+                        <p className="text-sm text-gray-600 mb-4 line-clamp-3">
+                          {message.ragResults[0].content}
+                        </p>
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-blue-600 font-medium flex items-center gap-1">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                            </svg>
+                            Click to read policy
+                          </span>
+                          <a
+                            href={message.ragResults[0].url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-600 hover:text-blue-800 flex items-center gap-1"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            📖 Read Full
+                          </a>
+                        </div>
                       </div>
                     </div>
-                  ))}
-                </div>
+                  </div>
+                )}
+
+                {/* Alternative Documents */}
+                {message.ragResults.length > 1 && (
+                  <div className="mt-2 p-3 bg-gray-50 border border-gray-100 rounded-lg">
+                    <h4 className="text-xs font-medium text-gray-500 mb-2">
+                      Other relevant policies:
+                    </h4>
+                    <div className="flex flex-wrap gap-2">
+                      {message.ragResults.slice(1).map((result, index) => (
+                        <button
+                          key={`alt-doc-${index}`}
+                          className="text-xs text-gray-600 bg-white px-2 py-1 rounded border border-gray-100 hover:bg-gray-50 hover:border-gray-200 transition-colors cursor-pointer flex items-center gap-1"
+                          onClick={() => window.open(result.url, '_blank')}
+                        >
+                          📄 {result.title}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
             {/* --- Form Results --- */}
-            {showFormResults && (message.formResults?.length ?? 0) > 0 && (
-              <div className="mt-6 p-4 bg-green-50 border border-green-200 rounded-lg">
-                <h4 className="text-sm font-semibold text-green-800 mb-3 flex items-center">
-                  📋 Relevant Forms & Applications
-                </h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {message.formResults?.map((result, index) => (
-                    <div
-                      key={index}
-                      className="rag-card p-4 cursor-pointer"
-                      onClick={async () => {
-                        setSelectedForm(result);
-                        setIsLoadingForm(true);
-                        setExtractedFormSchema(null);
-                        
-                        try {
-                          const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/extractFormById`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ form_id: result.id }),
-                          });
-                          if (response.ok) {
-                            const data = await response.json();
-                            console.log("✅ extractFormPreprocessed response:", data);
-                            setExtractedFormSchema(data);
-                            if (setFormSchema) setFormSchema(data); // also send to sidebar
-                          } else {
-                            console.error('Failed to extract form');
+            {showFormResults && message.formResults && message.formResults.length > 0 && (
+              <div className="mt-6 space-y-4">
+                {/* Best Match Form */}
+                {message.formResults[0] && (
+                  <div className="p-5 bg-green-50 border-2 border-green-200 rounded-xl shadow-sm">
+                    <h4 className="text-sm font-semibold text-green-800 mb-3 flex items-center gap-2">
+                      ⭐️ Best Matching Form
+                    </h4>
+                    <div className="bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow">
+                      <div
+                        key="best-match"
+                        className="p-5 cursor-pointer"
+                        onClick={async () => {
+                          const bestMatch = message.formResults?.[0];
+                          if (!bestMatch) return;
+                          
+                          setSelectedForm(bestMatch);
+                          setIsLoadingForm(true);
+                          
+                          try {
+                            const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/extractFormById`, {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ form_id: bestMatch.id }),
+                            });
+                            if (response.ok) {
+                              const data = await response.json();
+                              setExtractedFormSchema(data);
+                              if (setFormSchema) setFormSchema(data);
+                            } else {
+                              console.error('Failed to extract form');
+                            }
+                          } catch (err) {
+                            console.error('Error extracting form:', err);
+                          } finally {
+                            if (!extractedFormSchema) {
+                              setIsLoadingForm(false);
+                            }
                           }
-                        } catch (err) {
-                          console.error('Error extracting form:', err);
-                        } finally {
-                          setIsLoadingForm(false);
-                        }
-                      }}
-
-                    >
-                      <div className="flex items-start justify-between mb-2">
-                        <h5 className="font-medium text-gray-900 line-clamp-2 flex-1">
-                          📋 {result.title}
-                        </h5>
-                        <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">
-                          Form
-                        </span>
-                      </div>
-                      <p className="text-sm text-gray-600 line-clamp-3 mb-3">{result.description}</p>
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="text-green-600 font-medium">Click to load form</span>
-                        <a
-                          href={result.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-blue-600 hover:text-blue-800 truncate"
-                        >
-                          📄 View PDF
-                        </a>
+                        }}
+                      >
+                        <div className="flex items-start justify-between mb-3">
+                          <h5 className="text-lg font-semibold text-gray-900 line-clamp-2 flex-1">
+                            📋 {message.formResults[0].title}
+                          </h5>
+                          <span className="text-xs bg-green-100 text-green-800 px-3 py-1.5 rounded-full font-medium">
+                            Recommended
+                          </span>
+                        </div>
+                        <p className="text-sm text-gray-600 mb-4">{message.formResults[0].description}</p>
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-green-600 font-medium flex items-center gap-1">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                            </svg>
+                            Click to fill form
+                          </span>
+                          <a
+                            href={message.formResults[0].url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-600 hover:text-blue-800 flex items-center gap-1"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            📄 View PDF
+                          </a>
+                        </div>
                       </div>
                     </div>
-                  ))}
-                </div>
+                  </div>
+                )}
+
+                {/* Alternative Forms */}
+                {message.formResults.length > 1 && (
+                  <div className="mt-2 p-3 bg-gray-50 border border-gray-100 rounded-lg">
+                    <h4 className="text-xs font-medium text-gray-500 mb-2">
+                      Other similar forms:
+                    </h4>
+                    <div className="flex flex-wrap gap-2">
+                      {message.formResults.slice(1).map((result, index) => (
+                        <button
+                          key={`alt-form-${index}`}
+                          className="text-xs text-gray-600 bg-white px-2 py-1 rounded border border-gray-100 hover:bg-gray-50 hover:border-gray-200 transition-colors cursor-pointer flex items-center gap-1"
+                          onClick={async () => {
+                            setSelectedForm(result);
+                            setIsLoadingForm(true);
+                            
+                            try {
+                              const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/extractFormById`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ form_id: result.id }),
+                              });
+                              if (response.ok) {
+                                const data = await response.json();
+                                setExtractedFormSchema(data);
+                                if (setFormSchema) setFormSchema(data);
+                              } else {
+                                console.error('Failed to extract form');
+                              }
+                            } catch (err) {
+                              console.error('Error extracting form:', err);
+                            } finally {
+                              if (!extractedFormSchema) {
+                                setIsLoadingForm(false);
+                              }
+                            }
+                          }}
+                          title="Click to load this form"
+                        >
+                          <span>📋</span>
+                          <span className="truncate">{result.title}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 

@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { CheckCircle, Clock, AlertCircle, Calendar, FileText, ArrowRight } from 'lucide-react';
+import { CheckCircle, Clock, AlertCircle, Calendar, FileText, ArrowRight, ArrowLeft } from 'lucide-react';
+import { useRouter } from 'next/router';
 import { useAuth } from '../contexts/AuthContext';
 import { ApplicationService } from '../lib/applicationService';
+import DashboardHeader from '../components/DashboardHeader';
 
 interface ApplicationProgress {
   applied: { date: string | null; completed: boolean };
@@ -19,6 +21,7 @@ interface Application {
 }
 
 export default function StatusPage() {
+  const router = useRouter();
   const { user, loading } = useAuth();
   const [applications, setApplications] = useState<Application[]>([]);
   const [filterStatus, setFilterStatus] = useState<string>('all');
@@ -118,10 +121,13 @@ export default function StatusPage() {
 
   if (loading || isLoading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading applications...</p>
+      <div className="min-h-screen bg-gradient-to-br from-red-50 via-white to-yellow-50">
+        <DashboardHeader />
+        <div className="flex items-center justify-center h-96">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-red-600 mx-auto mb-4"></div>
+            <p className="text-gray-600">Loading applications...</p>
+          </div>
         </div>
       </div>
     );
@@ -129,37 +135,40 @@ export default function StatusPage() {
 
   if (!user) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold text-gray-900 mb-4">Please Sign In</h1>
-          <p className="text-gray-600 mb-6">You need to sign in to view your applications.</p>
-          <button
-            onClick={() => window.location.href = '/dashboard'}
-            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            Go to Dashboard
-          </button>
+      <div className="min-h-screen bg-gradient-to-br from-red-50 via-white to-yellow-50">
+        <DashboardHeader />
+        <div className="flex items-center justify-center h-96">
+          <div className="text-center">
+            <h1 className="text-2xl font-bold text-gray-900 mb-4">Please Sign In</h1>
+            <p className="text-gray-600 mb-6">You need to sign in to view your applications.</p>
+            <button
+              onClick={() => router.push('/dashboard')}
+              className="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+            >
+              Go to Dashboard
+            </button>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Header */}
-        <div className="mb-8">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900 mb-2">Application Status</h1>
-              <p className="text-gray-600">Track your government form applications and their progress</p>
-            </div>
-            <a
-              href="/"
-              className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors text-sm font-medium"
-            >
-              ← Back to Chat
-            </a>
+    <div className="min-h-screen bg-gradient-to-br from-red-50 via-white to-yellow-50">
+      <DashboardHeader />
+      
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Header with Back Button */}
+        <div className="flex items-center gap-4 mb-8">
+          <button
+            onClick={() => router.push('/dashboard')}
+            className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+          >
+            <ArrowLeft className="w-5 h-5" />
+          </button>
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Application Status</h1>
+            <p className="text-gray-600 mt-1">Track your government form applications and their progress</p>
           </div>
         </div>
 
