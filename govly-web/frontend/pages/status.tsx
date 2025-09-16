@@ -220,7 +220,7 @@ export default function StatusPage() {
             onClick={() => setFilterStatus('all')}
             className={`px-4 py-2 rounded-lg border transition-colors ${
               filterStatus === 'all'
-                ? 'bg-blue-600 text-white border-blue-600'
+                ? 'bg-red-600 text-white border-red-600'
                 : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
             }`}
           >
@@ -230,7 +230,7 @@ export default function StatusPage() {
             onClick={() => setFilterStatus('applied')}
             className={`px-4 py-2 rounded-lg border transition-colors ${
               filterStatus === 'applied'
-                ? 'bg-blue-600 text-white border-blue-600'
+                ? 'bg-red-600 text-white border-red-600'
                 : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
             }`}
           >
@@ -240,7 +240,7 @@ export default function StatusPage() {
             onClick={() => setFilterStatus('reviewed')}
             className={`px-4 py-2 rounded-lg border transition-colors ${
               filterStatus === 'reviewed'
-                ? 'bg-blue-600 text-white border-blue-600'
+                ? 'bg-red-600 text-white border-red-600'
                 : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
             }`}
           >
@@ -250,7 +250,7 @@ export default function StatusPage() {
             onClick={() => setFilterStatus('confirmed')}
             className={`px-4 py-2 rounded-lg border transition-colors ${
               filterStatus === 'confirmed'
-                ? 'bg-blue-600 text-white border-blue-600'
+                ? 'bg-red-600 text-white border-red-600'
                 : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
             }`}
           >

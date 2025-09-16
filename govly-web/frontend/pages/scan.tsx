@@ -224,7 +224,7 @@ function CustomDynamicForm({
     <div className="p-4 border rounded-lg bg-white shadow">
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-xl font-semibold text-gray-900">Scanned Form</h2>
-        <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-medium">
+        <span className="px-3 py-1 bg-red-100 text-red-800 rounded-full text-sm font-medium">
           {totalFields} fields
         </span>
       </div>
@@ -237,7 +237,7 @@ function CustomDynamicForm({
         </div>
         <div className="w-full bg-gray-200 rounded-full h-2">
           <div
-            className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+            className="bg-red-600 h-2 rounded-full transition-all duration-300"
             style={{ width: `${progress}%` }}
           ></div>
         </div>
@@ -252,7 +252,7 @@ function CustomDynamicForm({
             placeholder="Search for fields..."
             value={searchQuery}
             onChange={(e) => handleSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
           />
         </div>
 
@@ -268,7 +268,7 @@ function CustomDynamicForm({
                 <div className="font-medium text-gray-900">{result.label}</div>
                 <div className="text-sm text-gray-500">{result.field}</div>
                 {result.value && (
-                  <div className="text-xs text-blue-600 mt-1">Current: {result.value}</div>
+                  <div className="text-xs text-red-600 mt-1">Current: {result.value}</div>
                 )}
               </div>
             ))}
@@ -278,18 +278,18 @@ function CustomDynamicForm({
 
       {/* Current Field Card */}
       <div className="mb-6">
-        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-6">
+        <div className="bg-gradient-to-r from-red-50 to-rose-50 border border-red-200 rounded-xl p-6">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-blue-900">
+            <h3 className="text-lg font-semibold text-red-900">
               {currentField.label}
             </h3>
-            <span className="text-sm text-blue-600 bg-blue-100 px-2 py-1 rounded-full">
+            <span className="text-sm text-red-700 bg-red-100 px-2 py-1 rounded-full">
               {currentField.type}
             </span>
           </div>
 
           {currentField.description && (
-            <p className="text-blue-700 mb-4 text-sm">{currentField.description}</p>
+            <p className="text-red-700 mb-4 text-sm">{currentField.description}</p>
           )}
 
           {/* Autofill Button */}
@@ -298,7 +298,7 @@ function CustomDynamicForm({
               <button
                 type="button"
                 onClick={() => handleChange(currentField.name, autofillSuggestions[currentField.name])}
-                className="text-sm text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-3 py-1 rounded-lg transition-colors"
+                className="text-sm text-red-700 hover:text-red-800 bg-red-50 hover:bg-red-100 px-3 py-1 rounded-lg transition-colors"
               >
                 ✨ Autofill: {autofillSuggestions[currentField.name]}
               </button>
@@ -316,7 +316,7 @@ function CustomDynamicForm({
                 className={`w-full border-2 px-4 py-3 rounded-lg text-lg transition-all duration-200 ${
                   formData[currentField.name]
                     ? "border-green-300 bg-green-50"
-                    : "border-blue-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                    : "border-red-200 focus:border-red-400 focus:ring-2 focus:ring-red-100"
                 }`}
                 onChange={(e) => handleChange(currentField.name, e.target.value)}
               />
@@ -330,7 +330,7 @@ function CustomDynamicForm({
                 className={`w-full border-2 px-4 py-3 rounded-lg text-lg transition-all duration-200 ${
                   formData[currentField.name]
                     ? "border-green-300 bg-green-50"
-                    : "border-blue-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                    : "border-red-200 focus:border-red-400 focus:ring-2 focus:ring-red-100"
                 }`}
                 onChange={(e) => handleChange(currentField.name, e.target.value)}
               />
@@ -341,7 +341,7 @@ function CustomDynamicForm({
                 <input
                   type="checkbox"
                   checked={formData[currentField.name] || false}
-                  className="h-6 w-6 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                  className="h-6 w-6 text-red-600 focus:ring-red-500 border-gray-300 rounded"
                   onChange={(e) => handleChange(currentField.name, e.target.checked)}
                 />
                 <span className="text-lg text-gray-700">Check this box</span>
@@ -357,7 +357,7 @@ function CustomDynamicForm({
                 className={`w-full border-2 px-4 py-3 rounded-lg text-lg italic text-gray-600 transition-all duration-200 ${
                   formData[currentField.name]
                     ? "border-green-300 bg-green-50"
-                    : "border-blue-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                    : "border-red-200 focus:border-red-400 focus:ring-2 focus:ring-red-100"
                 }`}
                 onChange={(e) => handleChange(currentField.name, e.target.value)}
               />
@@ -407,7 +407,7 @@ function CustomDynamicForm({
           className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-all duration-200 ${
             currentFieldIndex === totalFields - 1
               ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-              : "bg-blue-600 text-white hover:bg-blue-700"
+              : "bg-red-600 text-white hover:bg-red-700"
           }`}
         >
           <span>Next</span>
@@ -490,24 +490,41 @@ export default function ScanPage() {
     }
   };
 
-  const startUpload = (file: File) => {
+  const startUpload = async (file: File) => {
     const fileId = file.name + file.size; // Unique identifier for each file
     setIsUploading(prev => ({ ...prev, [fileId]: true }));
     setUploadProgress(prev => ({ ...prev, [fileId]: 0 }));
 
-    // Simulate upload progress
-    const interval = setInterval(() => {
-      setUploadProgress(prev => {
-        const currentProgress = prev[fileId] || 0;
-        if (currentProgress >= 100) {
-          clearInterval(interval);
-          setIsUploading(prev => ({ ...prev, [fileId]: false }));
-          setUploadComplete(prev => ({ ...prev, [fileId]: true }));
-          return { ...prev, [fileId]: 100 };
-        }
-        return { ...prev, [fileId]: currentProgress + 10 };
+    try {
+      // Create FormData for file upload
+      const formData = new FormData();
+      formData.append('file', file);
+
+      // Upload file to backend
+      const response = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
       });
-    }, 200);
+
+      if (!response.ok) {
+        throw new Error('Upload failed');
+      }
+
+      const result = await response.json();
+      
+      // Update states to show completion
+      setUploadProgress(prev => ({ ...prev, [fileId]: 100 }));
+      setIsUploading(prev => ({ ...prev, [fileId]: false }));
+      setUploadComplete(prev => ({ ...prev, [fileId]: true }));
+      
+      return result;
+
+    } catch (error) {
+      console.error('Upload error:', error);
+      setError('Failed to upload file');
+      setIsUploading(prev => ({ ...prev, [fileId]: false }));
+      throw error;
+    }
   };
 
   const handleConvertToForm = async () => {
@@ -517,28 +534,17 @@ export default function ScanPage() {
     setError(null);
 
     try {
-      // Process the first file for now (can be extended to process multiple files)
+      // Get the upload result from the completed upload
       const selectedFile = selectedFiles[0];
+      const fileId = selectedFile.name + selectedFile.size;
       
-      // Create FormData for file upload
-      const formData = new FormData();
-      formData.append('file', selectedFile);
-
-      // First, upload the file to the backend
-      const uploadResponse = await fetch('/api/upload', {
-        method: 'POST',
-        body: formData,
-      });
-
-      let fileUrl: string;
-
-      if (uploadResponse.ok) {
-        const uploadResult = await uploadResponse.json();
-        fileUrl = uploadResult.url;
-      } else {
-        // Fallback: use file name directly (assuming backend can access it)
-        fileUrl = selectedFile.name;
+      // Check if file was uploaded successfully
+      if (!uploadComplete[fileId]) {
+        throw new Error('File not uploaded');
       }
+      
+      // Use the file name as URL (it's now in the backend forms directory)
+      const fileUrl = selectedFile.name;
 
       // Extract form fields using OCR
       const extractResponse = await fetch('/api/extractFormPreprocessed', {
@@ -559,11 +565,17 @@ export default function ScanPage() {
       setExtractedSchema(extractResult);
 
       // Detect agency from the extracted text
-      // We'll use the first few field labels as context for agency detection
-      const contextText = extractResult.fields
-        .slice(0, 5)
-        .map((field: Field) => `${field.label}: ${field.description || ''}`)
-        .join(' ');
+      // Use form title if available, otherwise use field labels as context
+      let contextText = '';
+      if (extractResult.form_title) {
+        contextText = `Form: ${extractResult.form_title}`;
+      } else {
+        // Fallback to using first few field labels as context for agency detection
+        contextText = extractResult.fields
+          .slice(0, 5)
+          .map((field: Field) => `${field.label}: ${field.description || ''}`)
+          .join(' ');
+      }
 
       if (contextText.trim()) {
         const agencyResponse = await fetch('/api/detectAgency', {
@@ -580,11 +592,11 @@ export default function ScanPage() {
 
         if (agencyResponse.ok) {
           const agencyResult = await agencyResponse.json();
-          if (agencyResult.detected_agency) {
+          if (agencyResult.agency) {
             setDetectedAgency({
-              name: agencyResult.detected_agency,
+              name: agencyResult.agency,
               confidence: agencyResult.confidence || 0.8,
-              description: agencyResult.description
+              description: agencyResult.reasoning
             });
           }
         }
@@ -648,7 +660,7 @@ export default function ScanPage() {
 
         {/* Step 1: File Upload */}
         {selectedFiles.length === 0 && (
-          <div className="bg-white rounded-xl border-2 border-dashed border-gray-300 p-12 text-center hover:border-red-400 transition-colors">
+          <div className="bg-white rounded-xl border-2 border-dashed border-gray-300 p-12 text-center hover:border-red-400 transition-colors min-h-80 flex flex-col items-center justify-center">
             <div className="mx-auto w-24 h-24 bg-red-100 rounded-full flex items-center justify-center mb-6">
               <Upload className="w-12 h-12 text-red-600" />
             </div>
@@ -838,7 +850,7 @@ export default function ScanPage() {
             <div className="flex gap-3 justify-center">
               <button
                 onClick={() => router.push('/status')}
-                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                className="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
               >
                 Track Application
               </button>

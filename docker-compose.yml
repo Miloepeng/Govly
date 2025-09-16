@@ -8,6 +8,9 @@ services:
     environment:
       - PORT=8000
       - SEA_LION_API_KEY=${SEA_LION_API_KEY}
+      - SEA_LION_RETRIES=${SEA_LION_RETRIES:-5}
+      - SEA_LION_TIMEOUT=${SEA_LION_TIMEOUT:-90}
+      - SEA_LION_FALLBACK_MODEL=${SEA_LION_FALLBACK_MODEL:-}
       - SUPABASE_URL=${SUPABASE_URL}
       - SUPABASE_KEY=${SUPABASE_KEY}
       - USE_LLAMA_INDEX=${USE_LLAMA_INDEX:-true}
@@ -27,11 +30,21 @@ services:
     build:
       context: ./govly-web/frontend
       dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: http://backend:8000
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY}
     ports:
       - "3000:3000"
     environment:
+      # Frontend API URL (internal Docker network)
       - NEXT_PUBLIC_API_URL=http://backend:8000
+      # Supabase configuration (must match .env file)
+      - NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}
+      - NEXT_PUBLIC_SUPABASE_ANON_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY}
       - NODE_ENV=production
+    env_file:
+      - .env  # Explicitly reference the .env file
     depends_on:
       backend:
         condition: service_healthy

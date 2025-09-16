@@ -1,7 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/router';
-import { ArrowLeft, MessageSquare, Send, FileText, ExternalLink, Maximize2, Minimize2, Search, Quote } from 'lucide-react';
+import { ArrowLeft, MessageSquare, Send, FileText, ExternalLink, Maximize2, Minimize2, Search, Quote, MapPin } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import dynamic from 'next/dynamic';
+const PDFViewer = dynamic(() => import('../../components/PDFViewer'), { ssr: false });
+import WebsiteViewer from '../../components/WebsiteViewer';
 
 interface Document {
   id: string;
@@ -27,99 +30,321 @@ interface ChatMessage {
     page?: number;
     section?: string;
   }>;
+  referencedSections?: string[];
 }
 
-// Hardcoded documents (same as in documents list)
+// Component for rendering document content with highlights and search
+function DocumentContentWithHighlights({
+  content,
+  highlightedSections,
+  searchQuery
+}: {
+  content: string;
+  highlightedSections: string[];
+  searchQuery: string;
+}) {
+  const highlightText = (text: string) => {
+    if (!searchQuery && highlightedSections.length === 0) {
+      return text;
+    }
+
+    let processedText = text;
+
+    // Highlight search query
+    if (searchQuery.trim()) {
+      const searchRegex = new RegExp(`(${searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+      processedText = processedText.replace(
+        searchRegex,
+        '<mark class="bg-yellow-200 px-1 rounded">$1</mark>'
+      );
+    }
+
+    // Highlight referenced sections
+    highlightedSections.forEach((section) => {
+      const variations = [
+        section,
+        `# ${section}`,
+        `## ${section}`,
+        section.toLowerCase(),
+      ];
+
+      variations.forEach((variation) => {
+        const sectionRegex = new RegExp(`(${variation.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+        processedText = processedText.replace(
+          sectionRegex,
+          '<mark class="bg-red-100 text-red-800 px-2 py-1 rounded-md border-l-4 border-red-500">$1</mark>'
+        );
+      });
+    });
+
+    return processedText;
+  };
+
+  return (
+    <div
+      className="whitespace-pre-line"
+      dangerouslySetInnerHTML={{ __html: highlightText(content) }}
+    />
+  );
+}
+
+// Hardcoded documents using real PDFs and government websites
 const SAMPLE_DOCUMENTS: Document[] = [
   {
     id: '1',
-    title: 'Vietnam Business Registration Guide 2024',
+    title: 'Giấy chứng nhận đăng ký doanh nghiệp - Công ty cổ phần',
     type: 'pdf',
     category: 'Business',
-    description: 'Complete guide for registering a business in Vietnam, including all required forms and procedures.',
-    url: '/documents/business-registration-guide.pdf',
+    description: 'Business registration certificate for joint stock companies in Vietnam.',
+    url: '/api/pdf/vietmy-giay-chung-nhan-dang-ky-doanh-nghiep-cong-ty-co-phan.pdf',
     dateAdded: '2024-09-15',
     author: 'Ministry of Planning and Investment',
-    tags: ['business', 'registration', 'guide'],
-    size: '2.4 MB',
-    content: `# Vietnam Business Registration Guide 2024
+    tags: ['business', 'registration', 'certificate'],
+    size: '2.1 MB',
+    content: `# Business Registration Certificate - Joint Stock Company
 
-## Overview
-This comprehensive guide provides step-by-step instructions for registering a business in Vietnam. The process involves several key stages and requires specific documentation.
+## Company Information
+This certificate contains official registration details for a joint stock company in Vietnam, including:
 
-## Key Requirements
-1. Business name registration
-2. Investment certificate (for foreign investors)
-3. Business registration certificate
-4. Tax registration
-5. Labor registration
+## Key Sections
+- Company name and legal form
+- Business address and headquarters location
+- Charter capital and ownership structure
+- Business scope and activities
+- Legal representative information
+- Registration number and dates
 
-## Required Documents
-- Passport copies of all investors
-- Proof of registered address
-- Business plan and financial projections
-- Articles of association
-- Investment decision documents
+## Required Documents for Registration
+- Application for business registration
+- Company charter/articles of association
+- List of founding shareholders
+- Proof of legal capital contribution
+- Headquarters lease agreement or ownership documents
 
-## Processing Time
-- Business name registration: 3-5 working days
-- Investment certificate: 15-45 days depending on sector
-- Business registration: 15-20 working days
-- Total estimated time: 35-70 working days
+## Processing Information
+- Registration authority: Department of Planning and Investment
+- Processing time: 15-20 working days
+- Certificate validity: Permanent (subject to annual reporting)
 
-## Fees Structure
-- Business name registration: 100,000 VND
-- Investment certificate: 11,000,000 VND
-- Business registration: 300,000 VND
-- Total estimated fees: 11,400,000 VND
-
-For detailed procedures and forms, please refer to the subsequent sections of this guide.`
+This certificate serves as legal proof of business establishment and operation authorization.`
   },
   {
     id: '2',
-    title: 'Housing Permit Application Requirements',
-    type: 'link',
+    title: 'Đơn xin xác nhận có đất ở hợp pháp',
+    type: 'pdf',
     category: 'Housing',
-    description: 'Official government webpage detailing housing permit application requirements and procedures.',
-    url: 'https://example.gov.vn/housing-permits',
-    dateAdded: '2024-09-10',
-    author: 'Ministry of Construction',
-    tags: ['housing', 'permits', 'requirements'],
-    content: `# Housing Permit Application Requirements
+    description: 'Application form for legal residential land confirmation in Vietnam.',
+    url: '/api/pdf/Mẫu_đơn_xin_xác_nhận_có_đất_ở_hợp_pháp.pdf',
+    dateAdded: '2024-09-14',
+    author: 'Ministry of Natural Resources and Environment',
+    tags: ['housing', 'land', 'confirmation'],
+    size: '1.8 MB',
+    content: `# Application for Legal Residential Land Confirmation
 
-## Introduction
-This document outlines the requirements and procedures for obtaining housing permits in Vietnam. All construction projects must comply with local regulations and obtain proper permits before construction begins.
+## Purpose
+This form is used to apply for official confirmation of legal residential land ownership in Vietnam.
 
-## Types of Housing Permits
-1. Construction permits for new buildings
-2. Renovation permits for existing structures
-3. Demolition permits
-4. Occupancy permits
+## Required Information
+- Personal information of applicant
+- Property location and boundaries
+- Current land use status
+- Supporting documentation
 
-## Application Process
-### Step 1: Document Preparation
-Gather all required documents including:
-- Land use rights certificate
-- Architectural drawings approved by authorized agencies
-- Construction contractor license
-- Environmental impact assessment (if required)
+## Key Sections
+1. Applicant personal details
+2. Property information and location
+3. Land use history and documentation
+4. Current occupancy status
+5. Supporting evidence attachments
 
-### Step 2: Submission
-Submit applications to the local Department of Construction or People's Committee depending on project scope.
+## Supporting Documents
+- Identity card/passport copies
+- Existing land use certificates (if any)
+- Property purchase agreements
+- Inheritance documents (if applicable)
+- Survey maps and boundaries
+- Neighbor confirmations
 
-### Step 3: Review Process
-Authorities review submissions within 20-45 days depending on project complexity.
+## Processing Timeline
+- Initial review: 7-10 working days
+- Field verification: 10-15 working days
+- Final approval: 20-30 working days total
 
-## Common Requirements
-- Valid land use rights
-- Compliance with local zoning regulations
-- Approved architectural plans
-- Licensed contractors
-- Environmental clearances where applicable
-
-For specific requirements in your locality, contact your local construction department.`
+This confirmation is essential for property transactions and development permits.`
   },
-  // Add more sample documents as needed...
+  {
+    id: '3',
+    title: 'Mẫu số 16 - Phụ lục I (Form Template)',
+    type: 'pdf',
+    category: 'Administrative',
+    description: 'Official government form template for administrative procedures.',
+    url: '/api/pdf/8_5_2025_32_14_636_mau-so-16---phu-luc-i.pdf',
+    dateAdded: '2024-09-13',
+    author: 'Government Administrative Office',
+    tags: ['form', 'administrative', 'template'],
+    size: '1.2 MB',
+    content: `# Form Template No. 16 - Appendix I
+
+## Form Purpose
+This is an official government form template used for various administrative procedures and applications.
+
+## Form Sections
+- Header with ministry/agency information
+- Applicant identification section
+- Application details and purpose
+- Supporting document checklist
+- Signature and date fields
+
+## Usage Guidelines
+- Complete all required fields clearly
+- Attach necessary supporting documents
+- Submit to appropriate government office
+- Retain copies for personal records
+
+## Processing Information
+- Form submission requirements
+- Documentation checklist
+- Processing timeline expectations
+- Contact information for inquiries
+
+This standardized form ensures consistent processing of administrative requests across government departments.`
+  },
+  {
+    id: '4',
+    title: 'FAQ - Frequently Asked Questions',
+    type: 'link',
+    category: 'Support',
+    description: 'Frequently asked questions about government services and procedures from Ministry of Industry and Trade.',
+    url: 'https://dichvucong.moit.gov.vn/FAQ.aspx',
+    dateAdded: '2024-09-12',
+    author: 'Ministry of Industry and Trade',
+    tags: ['faq', 'support', 'questions'],
+    content: `# Frequently Asked Questions - Government Services
+
+## Common Questions
+This page provides answers to frequently asked questions about government services and administrative procedures.
+
+## Topics Covered
+- Business registration procedures
+- License applications and renewals
+- Document requirements and processing
+- Fee structures and payment methods
+- Contact information for assistance
+
+## Service Categories
+1. Business Registration Services
+2. Import/Export Licensing
+3. Industrial Development Permits
+4. Trade Promotion Services
+5. Consumer Protection
+
+## How to Use
+- Browse categories to find relevant questions
+- Use search function for specific topics
+- Contact support if question not found
+- Submit new questions through feedback form
+
+## Support Channels
+- Online chat support
+- Phone hotline assistance
+- Email inquiry system
+- In-person consultations
+
+Updated regularly with new questions and policy changes.`
+  },
+  {
+    id: '5',
+    title: 'Business Support Services',
+    type: 'link',
+    category: 'Business',
+    description: 'Business support hotline and consultation services from Ministry of Industry and Trade.',
+    url: 'https://dichvucong.moit.gov.vn/SupportPhone.aspx',
+    dateAdded: '2024-09-11',
+    author: 'Ministry of Industry and Trade',
+    tags: ['business', 'support', 'hotline'],
+    content: `# Business Support Services
+
+## Support Hotline
+Dedicated phone support for businesses seeking assistance with government procedures and regulations.
+
+## Services Provided
+- Guidance on business registration
+- License application assistance
+- Regulatory compliance advice
+- Document preparation support
+- Process timeline information
+
+## Contact Methods
+- Toll-free hotline numbers
+- Regional office locations
+- Email support addresses
+- Online consultation booking
+
+## Operating Hours
+- Monday to Friday: 8:00 AM - 5:00 PM
+- Lunch break: 12:00 PM - 1:00 PM
+- Emergency contact available
+
+## Support Languages
+- Vietnamese (primary)
+- English (limited availability)
+- Other languages upon request
+
+## Preparation Tips
+- Have business documents ready
+- Prepare specific questions
+- Note reference numbers if applicable
+- Allow sufficient time for consultation`
+  },
+  {
+    id: '6',
+    title: 'E-commerce Registration Services',
+    type: 'link',
+    category: 'E-commerce',
+    description: 'Registration and amendment services for e-commerce business applications.',
+    url: 'https://dichvucong.moit.gov.vn/VdxpTTHCOnlineDetail.aspx?DocId=254',
+    dateAdded: '2024-09-10',
+    author: 'Ministry of Industry and Trade',
+    tags: ['ecommerce', 'registration', 'amendments'],
+    content: `# E-commerce Registration and Amendment Services
+
+## Service Overview
+Online platform for registering e-commerce businesses and managing registration amendments in Vietnam.
+
+## Available Services
+- Initial e-commerce registration
+- Registration information amendments
+- Business scope modifications
+- Contact detail updates
+- Legal representative changes
+
+## Registration Requirements
+- Valid business license
+- E-commerce business plan
+- Technical infrastructure details
+- Privacy policy and terms of service
+- Consumer protection measures
+
+## Amendment Process
+1. Login to e-government portal
+2. Select amendment type
+3. Complete required forms
+4. Upload supporting documents
+5. Submit and track application
+
+## Processing Times
+- New registrations: 15-20 business days
+- Simple amendments: 7-10 business days
+- Complex changes: 10-15 business days
+
+## Required Documents
+- Business registration certificate
+- Legal representative ID
+- Current e-commerce registration (for amendments)
+- Detailed change documentation
+
+Modern online platform with real-time tracking and digital certificate issuance.`
+  }
 ];
 
 export default function DocumentViewerPage() {
@@ -127,6 +352,7 @@ export default function DocumentViewerPage() {
   const { id } = router.query;
   const { user } = useAuth();
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const documentContentRef = useRef<HTMLDivElement>(null);
 
   const [document, setDocument] = useState<Document | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -134,6 +360,10 @@ export default function DocumentViewerPage() {
   const [newMessage, setNewMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [highlightedSections, setHighlightedSections] = useState<string[]>([]);
+  const [persistentHighlights, setPersistentHighlights] = useState<string[]>([]);
+  const [extractedContent, setExtractedContent] = useState<string>('');
+  const [isDocumentLoading, setIsDocumentLoading] = useState<boolean>(true);
 
   useEffect(() => {
     if (id) {
@@ -156,6 +386,119 @@ export default function DocumentViewerPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
+  const handleTextExtracted = (text: string) => {
+    setExtractedContent(text);
+    console.log('Extracted text length:', text.length);
+  };
+
+  const handleDocumentLoadSuccess = () => {
+    setIsDocumentLoading(false);
+  };
+
+  const handleDocumentLoadError = (error: any) => {
+    setIsDocumentLoading(false);
+    console.error('Document load error:', error);
+  };
+
+  const scrollToSection = (sectionName: string) => {
+    console.log('🎯 Scrolling to section:', sectionName);
+    console.log('📄 Document type:', document?.type);
+    console.log('📝 Extracted content length:', extractedContent?.length || 0);
+
+    // Add persistent highlighting first (always visible)
+    setPersistentHighlights(prev => {
+      const newHighlights = [...prev];
+      if (!newHighlights.includes(sectionName)) {
+        newHighlights.push(sectionName);
+      }
+      return newHighlights;
+    });
+
+    // Add temporary visual highlight for immediate feedback
+    setHighlightedSections([sectionName]);
+    setTimeout(() => setHighlightedSections([]), 3000);
+
+    // For PDF viewer - search for section and navigate to correct page
+    if (document?.type === 'pdf' && extractedContent) {
+      console.log('🔍 Searching PDF content for:', sectionName);
+
+      // Try multiple search variations
+      const searchTerms = [
+        sectionName,
+        sectionName.toLowerCase(),
+        `# ${sectionName}`,
+        `## ${sectionName}`,
+        sectionName.replace(/\s+/g, ' ').trim(), // Normalize spaces
+        // Try without common words
+        sectionName.replace(/\b(section|part|chapter|article)\b/gi, '').trim()
+      ];
+
+      const lines = extractedContent.split('\n');
+      let targetPage = 1;
+      let foundMatch = false;
+
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+
+        // Track current page
+        const pageMatch = line.match(/--- Page (\d+) ---/);
+        if (pageMatch) {
+          targetPage = parseInt(pageMatch[1]);
+          continue;
+        }
+
+        // Check all search terms
+        for (const term of searchTerms) {
+          if (term && line.toLowerCase().includes(term.toLowerCase())) {
+            console.log(`✅ Found "${sectionName}" on page ${targetPage}: ${line.substring(0, 100)}...`);
+
+            // Set search query to highlight the text in PDF viewer
+            setSearchQuery(term);
+
+            foundMatch = true;
+            break;
+          }
+        }
+
+        if (foundMatch) break;
+      }
+
+      if (!foundMatch) {
+        console.log('❌ Section not found in PDF, using general search');
+        // Fallback: just search for the section name
+        setSearchQuery(sectionName);
+      }
+    }
+
+    // For website viewers - add visual indicators since we can't control iframe content
+    else if (document?.type === 'link') {
+      console.log('🌐 Adding website section indicator for:', sectionName);
+
+      // For websites, we can only show visual indicators
+      // The search query will be shown in the status bar
+      setSearchQuery(sectionName);
+
+      console.log('✅ Website section highlighting applied');
+    }
+
+    // Fallback for any document with hardcoded content
+    else if (document?.content) {
+      console.log('📖 Searching hardcoded content for:', sectionName);
+
+      const contentLower = document.content.toLowerCase();
+      const sectionLower = sectionName.toLowerCase();
+
+      if (contentLower.includes(sectionLower)) {
+        console.log('✅ Found section in hardcoded content');
+        setSearchQuery(sectionName);
+      } else {
+        console.log('❌ Section not found in hardcoded content');
+      }
+    }
+
+    console.log('🏁 ScrollToSection completed');
+  };
+
   useEffect(() => {
     scrollToBottom();
   }, [chatMessages]);
@@ -175,32 +518,26 @@ export default function DocumentViewerPage() {
     setIsLoading(true);
 
     try {
-      // Try to use real API first, fallback to hardcoded responses
+      // Try to use the new document-aware chat endpoint
       let response;
 
       try {
-        // Use the existing chat endpoint with document context
-        const apiResponse = await fetch('/api/chat', {
+        // Use the new document chat endpoint
+        const apiResponse = await fetch('/api/documentChat', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            message: `Based on the document "${document.title}" (${document.category}), please answer: ${newMessage}`,
+            message: newMessage,
+            documentId: document.id,
+            documentTitle: document.title,
+            documentContent: extractedContent || document.content || '',
+            documentType: document.type,
             conversationContext: chatMessages.slice(-5).map(msg => ({
               role: msg.role,
               content: msg.content
-            })),
-            country: 'Vietnam',
-            language: 'English',
-            settings: {
-              documentContext: {
-                title: document.title,
-                category: document.category,
-                type: document.type,
-                content: document.content?.substring(0, 2000) // Send first 2000 chars as context
-              }
-            }
+            }))
           })
         });
 
@@ -208,13 +545,14 @@ export default function DocumentViewerPage() {
           const apiResult = await apiResponse.json();
           response = {
             content: apiResult.response,
+            referencedSections: apiResult.referencedSections || [],
             citations: [{ text: document.title, section: document.category }]
           };
         } else {
           throw new Error('API request failed');
         }
       } catch (apiError) {
-        console.log('API call failed, using fallback response:', apiError);
+        console.log('Document chat API call failed, using fallback response:', apiError);
         // Fallback to hardcoded responses
         response = generateAIResponse(newMessage, document);
       }
@@ -224,10 +562,18 @@ export default function DocumentViewerPage() {
         role: 'assistant',
         content: response.content,
         timestamp: new Date(),
-        citations: response.citations
+        citations: response.citations,
+        referencedSections: response.referencedSections || []
       };
 
       setChatMessages(prev => [...prev, aiMessage]);
+
+      // Auto-scroll to the first referenced section if available
+      if (response.referencedSections && response.referencedSections.length > 0) {
+        setTimeout(() => {
+          scrollToSection(response.referencedSections[0]);
+        }, 1000); // Delay to allow chat message to render first
+      }
     } catch (error) {
       const errorMessage: ChatMessage = {
         id: (Date.now() + 1).toString(),
@@ -249,7 +595,8 @@ export default function DocumentViewerPage() {
       if (doc.id === '1') {
         return {
           content: 'According to the Business Registration Guide, the total estimated fees are 11,400,000 VND, which breaks down as follows:\n\n• Business name registration: 100,000 VND\n• Investment certificate: 11,000,000 VND\n• Business registration: 300,000 VND\n\nThese fees may vary depending on your specific business type and location.',
-          citations: [{ text: 'Fees Structure', section: 'Section 5' }]
+          citations: [{ text: 'Fees Structure', section: 'Section 5' }],
+          referencedSections: ['Fees Structure']
         };
       }
     }
@@ -258,7 +605,8 @@ export default function DocumentViewerPage() {
       if (doc.id === '1') {
         return {
           content: 'The business registration process typically takes 35-70 working days in total:\n\n• Business name registration: 3-5 working days\n• Investment certificate: 15-45 days (depending on sector)\n• Business registration: 15-20 working days\n\nThe timeline can vary based on the complexity of your business and completeness of documentation.',
-          citations: [{ text: 'Processing Time', section: 'Section 4' }]
+          citations: [{ text: 'Processing Time', section: 'Section 4' }],
+          referencedSections: ['Processing Time']
         };
       }
     }
@@ -267,7 +615,8 @@ export default function DocumentViewerPage() {
       if (doc.id === '1') {
         return {
           content: 'For business registration in Vietnam, you need the following key documents:\n\n• Passport copies of all investors\n• Proof of registered address\n• Business plan and financial projections\n• Articles of association\n• Investment decision documents\n\nMake sure all documents are properly notarized and translated if necessary.',
-          citations: [{ text: 'Required Documents', section: 'Section 3' }]
+          citations: [{ text: 'Required Documents', section: 'Section 3' }],
+          referencedSections: ['Required Documents']
         };
       }
     }
@@ -275,14 +624,16 @@ export default function DocumentViewerPage() {
     if (lowerQuery.includes('permit') && doc.id === '2') {
       return {
         content: 'There are four main types of housing permits in Vietnam:\n\n1. Construction permits for new buildings\n2. Renovation permits for existing structures\n3. Demolition permits\n4. Occupancy permits\n\nEach type has specific requirements and processing procedures.',
-        citations: [{ text: 'Types of Housing Permits', section: 'Section 2' }]
+        citations: [{ text: 'Types of Housing Permits', section: 'Section 2' }],
+        referencedSections: ['Types of Housing Permits']
       };
     }
 
     // Default response
     return {
       content: `I can help you understand various aspects of "${doc.title}". Could you be more specific about what you'd like to know? For example, you could ask about:\n\n• Requirements and procedures\n• Timelines and processing duration\n• Fees and costs\n• Required documents\n• Specific sections or concepts\n\nWhat particular aspect interests you?`,
-      citations: []
+      citations: [],
+      referencedSections: []
     };
   };
 
@@ -356,58 +707,75 @@ export default function DocumentViewerPage() {
           isFullscreen ? 'w-full' : 'w-2/3'
         }`}>
           <div className="h-full flex flex-col">
-            {/* Document Search */}
+            {/* Document Search and Highlighted Sections */}
             <div className="p-4 border-b border-gray-200">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                <input
-                  type="text"
-                  placeholder="Search in document..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent text-sm"
-                />
+              <div className="space-y-3">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                  <input
+                    type="text"
+                    placeholder="Search in document..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent text-sm"
+                  />
+                </div>
+
+                {/* Highlighted Sections Panel */}
+                {persistentHighlights.length > 0 && (
+                  <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <h4 className="text-xs font-semibold text-red-800">Referenced Sections</h4>
+                      <button
+                        onClick={() => setPersistentHighlights([])}
+                        className="text-xs text-red-600 hover:text-red-800"
+                      >
+                        Clear all
+                      </button>
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      {persistentHighlights.map((section, index) => (
+                        <div
+                          key={index}
+                          className="inline-flex items-center gap-1 px-2 py-1 bg-red-100 text-red-700 rounded text-xs border border-red-300"
+                        >
+                          <div className="w-2 h-2 bg-red-500 rounded-full"></div>
+                          <span>{section}</span>
+                          <button
+                            onClick={() => setPersistentHighlights(prev => prev.filter(h => h !== section))}
+                            className="ml-1 text-red-500 hover:text-red-700"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
             {/* Document Content */}
-            <div className="flex-1 overflow-auto p-6">
+            <div className="flex-1 overflow-hidden" ref={documentContentRef}>
               {document.type === 'pdf' ? (
-                <div className="prose max-w-none">
-                  <div className="bg-gray-50 p-4 rounded-lg mb-6">
-                    <p className="text-sm text-gray-600 mb-2">
-                      <strong>Note:</strong> This is a preview of the document content. In a real implementation,
-                      this would show the actual PDF using a PDF viewer library.
-                    </p>
-                    <p className="text-sm text-gray-600">
-                      <strong>File:</strong> {document.url} ({document.size})
-                    </p>
-                  </div>
-                  <div className="whitespace-pre-line">
-                    {document.content}
-                  </div>
-                </div>
+                <PDFViewer
+                  url={document.url}
+                  onTextExtracted={handleTextExtracted}
+                  highlightedSections={highlightedSections}
+                  persistentHighlights={persistentHighlights}
+                  searchQuery={searchQuery}
+                  onLoadSuccess={handleDocumentLoadSuccess}
+                  onLoadError={handleDocumentLoadError}
+                />
               ) : (
-                <div className="space-y-4">
-                  <div className="bg-blue-50 p-4 rounded-lg">
-                    <p className="text-sm text-blue-800 mb-2">
-                      <strong>External Link:</strong> This document is hosted on an external website.
-                    </p>
-                    <a
-                      href={document.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-blue-600 hover:text-blue-800 underline text-sm"
-                    >
-                      {document.url}
-                    </a>
-                  </div>
-                  <div className="prose max-w-none">
-                    <div className="whitespace-pre-line">
-                      {document.content}
-                    </div>
-                  </div>
-                </div>
+                <WebsiteViewer
+                  url={document.url}
+                  onTextExtracted={handleTextExtracted}
+                  highlightedSections={highlightedSections}
+                  persistentHighlights={persistentHighlights}
+                  onLoadSuccess={handleDocumentLoadSuccess}
+                  onLoadError={handleDocumentLoadError}
+                />
               )}
             </div>
           </div>
@@ -498,6 +866,23 @@ export default function DocumentViewerPage() {
                             {citation.section && <span>• {citation.section}</span>}
                           </div>
                         ))}
+                      </div>
+                    )}
+                    {message.referencedSections && message.referencedSections.length > 0 && (
+                      <div className="mt-2 pt-2 border-t border-gray-300">
+                        <p className="text-xs text-gray-500 mb-1">Referenced sections:</p>
+                        <div className="flex flex-wrap gap-1">
+                          {message.referencedSections.map((section, index) => (
+                            <button
+                              key={index}
+                              onClick={() => scrollToSection(section)}
+                              className="inline-flex items-center gap-1 px-2 py-1 bg-blue-50 text-blue-700 rounded text-xs hover:bg-blue-100 transition-colors"
+                            >
+                              <MapPin className="w-3 h-3" />
+                              {section}
+                            </button>
+                          ))}
+                        </div>
                       </div>
                     )}
                     <p className="text-xs opacity-75 mt-1">

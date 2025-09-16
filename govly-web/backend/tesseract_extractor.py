@@ -6,7 +6,7 @@ Better OCR quality and comprehensive field detection
 
 import sys
 import pytesseract
-from PIL import Image
+from PIL import Image, ImageFilter, ImageOps
 import pdf2image
 from pathlib import Path
 import requests
@@ -169,36 +169,62 @@ Be extremely thorough - extract every single field that requires input."""
     except Exception as e:
         return {"error": f"Request failed: {str(e)}"}
 
-def extract_pdf_to_text(pdf_path: str, language: str = "vie+eng"):
-    """Improved PDF text extraction with better OCR settings"""
+def extract_pdf_to_text(file_path: str, language: str = "vie+eng"):
+    """Improved text extraction with better OCR settings for both PDFs and images"""
     
-    pdf_path = Path(pdf_path)
-    if not pdf_path.exists():
-        return {"error": f"PDF file not found: {pdf_path}"}
+    file_path = Path(file_path)
+    if not file_path.exists():
+        return {"error": f"File not found: {file_path}"}
     
-    print(f"🔍 Processing: {pdf_path.name}")
+    print(f"🔍 Processing: {file_path.name}")
     
     try:
-        # Convert PDF to images with higher DPI for better OCR
-        print("📄 Converting PDF to images (high quality)...")
-        images = pdf2image.convert_from_path(
-            pdf_path, 
-            dpi=400,  # Increased from 300 to 400
-            grayscale=False,  # Keep color for better recognition
-            size=(None, None)  # Keep original size
-        )
+        # Check if file is PDF or image
+        is_pdf = file_path.suffix.lower() == '.pdf'
+        
+        if is_pdf:
+            # Convert PDF to images with higher DPI for better OCR
+            print("📄 Converting PDF to images (high quality)...")
+            images = pdf2image.convert_from_path(
+                file_path, 
+                dpi=400,  # Increased from 300 to 400
+                grayscale=False,  # Keep color for better recognition
+                size=(None, None)  # Keep original size
+            )
+        else:
+            # Load image directly
+            print("📄 Loading image file...")
+            try:
+                image = Image.open(file_path)
+                images = [image]  # Wrap in list to match PDF format
+            except Exception as e:
+                return {"error": f"Failed to load image: {str(e)}"}
         
         extracted_texts = []
         
         for i, image in enumerate(images):
             print(f"  Processing page {i+1}/{len(images)}...")
-            
+            # --- Image preprocessing for better OCR on screenshots/scans ---
+            try:
+                # Convert to grayscale
+                processed = image.convert("L")
+                # Auto-contrast and slight sharpen via median filter noise reduction
+                processed = ImageOps.autocontrast(processed)
+                processed = processed.filter(ImageFilter.MedianFilter(size=3))
+                # 2x upscale to help small text
+                width, height = processed.size
+                processed = processed.resize((width * 2, height * 2), Image.LANCZOS)
+                # Adaptive-like threshold (simple)
+                processed = processed.point(lambda x: 0 if x < 180 else 255, mode='1')
+            except Exception:
+                processed = image
+
             # Enhanced OCR settings for better Vietnamese text recognition
             custom_config = r'--oem 3 --psm 6 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzÀÁẠẢÃÂẦẤẬẨẪĂẰẮẶẲẴÈÉẸẺẼÊỀẾỆỂỄÌÍỊỈĨÒÓỌỎÕÔỒỐỘỔỖƠỜỚỢỞỠÙÚỤỦŨƯỪỨỰỬỮỲÝỴỶỸĐàáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ0123456789.,:;()[]{}_-\s'
             
             # Extract text using Tesseract with custom config
             text = pytesseract.image_to_string(
-                image, 
+                processed, 
                 lang=language,
                 config=custom_config
             )

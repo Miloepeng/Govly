@@ -470,7 +470,7 @@ export default function DynamicForm({
         </div>
         <div className="w-full bg-gray-200 rounded-full h-2">
           <div 
-            className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+            className="bg-red-600 h-2 rounded-full transition-all duration-300"
             style={{ width: `${progress}%` }}
           ></div>
         </div>
@@ -492,7 +492,7 @@ export default function DynamicForm({
             placeholder="Search for fields or type to fill them..."
             value={searchQuery}
             onChange={(e) => handleSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
           />
         </div>
         
@@ -508,7 +508,7 @@ export default function DynamicForm({
                 <div className="font-medium text-gray-900">{result.field}</div>
                 <div className="text-sm text-gray-500">Value: {result.value}</div>
                 {result.value && (
-                  <div className="text-xs text-blue-600 mt-1">Current: {result.value}</div>
+                  <div className="text-xs text-red-600 mt-1">Current: {result.value}</div>
                 )}
               </div>
             ))}
@@ -518,18 +518,18 @@ export default function DynamicForm({
 
       {/* Current Field Card */}
       <div className="mb-6">
-        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-6">
+        <div className="bg-gradient-to-r from-red-50 to-rose-50 border border-red-200 rounded-xl p-6">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-blue-900">
+            <h3 className="text-lg font-semibold text-red-900">
               {currentField.label}
             </h3>
-            <span className="text-sm text-blue-600 bg-blue-100 px-2 py-1 rounded-full">
+            <span className="text-sm text-red-700 bg-red-100 px-2 py-1 rounded-full">
               {currentField.type}
             </span>
           </div>
           
           {currentField.description && (
-            <p className="text-blue-700 mb-4 text-sm">{currentField.description}</p>
+            <p className="text-red-700 mb-4 text-sm">{currentField.description}</p>
           )}
 
           {/* Autofill Button */}
@@ -538,7 +538,7 @@ export default function DynamicForm({
               <button
                 type="button"
                 onClick={() => handleChange(currentField.name, autofillSuggestions[currentField.name])}
-                className="text-sm text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-3 py-1 rounded-lg transition-colors"
+                className="text-sm text-red-700 hover:text-red-800 bg-red-50 hover:bg-red-100 px-3 py-1 rounded-lg transition-colors"
               >
                 ✨ Autofill: {autofillSuggestions[currentField.name]}
               </button>
@@ -556,7 +556,7 @@ export default function DynamicForm({
                 className={`w-full border-2 px-4 py-3 rounded-lg text-lg transition-all duration-200 ${
                   formData[currentField.name] 
                     ? "border-green-300 bg-green-50" 
-                    : "border-blue-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                    : "border-red-200 focus:border-red-400 focus:ring-2 focus:ring-red-100"
                 }`}
                 onChange={(e) => handleChange(currentField.name, e.target.value)}
               />
@@ -570,7 +570,7 @@ export default function DynamicForm({
                 className={`w-full border-2 px-4 py-3 rounded-lg text-lg transition-all duration-200 ${
                   formData[currentField.name] 
                     ? "border-green-300 bg-green-50" 
-                    : "border-blue-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                    : "border-red-200 focus:border-red-400 focus:ring-2 focus:ring-red-100"
                 }`}
                 onChange={(e) => handleChange(currentField.name, e.target.value)}
               />
@@ -581,7 +581,7 @@ export default function DynamicForm({
                 <input
                   type="checkbox"
                   checked={formData[currentField.name] || false}
-                  className="h-6 w-6 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                  className="h-6 w-6 text-red-600 focus:ring-red-500 border-gray-300 rounded"
                   onChange={(e) => handleChange(currentField.name, e.target.checked)}
                 />
                 <span className="text-lg text-gray-700">Check this box</span>
@@ -597,7 +597,7 @@ export default function DynamicForm({
                 className={`w-full border-2 px-4 py-3 rounded-lg text-lg italic text-gray-600 transition-all duration-200 ${
                   formData[currentField.name] 
                     ? "border-green-300 bg-green-50" 
-                    : "border-blue-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                    : "border-red-200 focus:border-red-400 focus:ring-2 focus:ring-red-100"
                 }`}
                 onChange={(e) => handleChange(currentField.name, e.target.value)}
               />
@@ -635,7 +635,7 @@ export default function DynamicForm({
           <span>Previous</span>
         </button>
 
-        <div className="flex items-center space-x-2">
+        <div className="flex-1 text-center">
           <span className="text-sm text-gray-600">
             Question {currentFieldIndex + 1} of {totalFields}
           </span>
@@ -647,7 +647,7 @@ export default function DynamicForm({
           className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-all duration-200 ${
             currentFieldIndex === totalFields - 1
               ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-              : "bg-blue-600 text-white hover:bg-blue-700"
+              : "bg-red-600 text-white hover:bg-red-700"
           }`}
         >
           <span>Next</span>

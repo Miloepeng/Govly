@@ -1,14 +1,14 @@
 import { useState } from 'react';
 import { LogIn, LogOut } from 'lucide-react';
+import Link from 'next/link';
 import { useAuth } from '../contexts/AuthContext';
 import AuthModal from './AuthModal';
-import UserProfile from './UserProfile';
 
 export default function DashboardHeader() {
   const { user, profile, signOut, loading } = useAuth();
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin');
-  const [showUserProfile, setShowUserProfile] = useState(false);
+  // Removed UserProfile modal
 
   return (
     <>
@@ -33,18 +33,15 @@ export default function DashboardHeader() {
                 </div>
               ) : user ? (
                 <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setShowUserProfile(true)}
-                    className="flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-lg bg-white hover:bg-gray-50 transition-colors"
-                  >
+                  <Link href="/profile" className="flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-lg bg-white hover:bg-gray-50 transition-colors">
                     <div className="w-6 h-6 rounded-full bg-red-100 text-red-600 flex items-center justify-center text-xs font-semibold">
                       {(profile?.full_name || user.email || 'U').charAt(0).toUpperCase()}
                     </div>
                     <p className="text-sm font-medium text-gray-900">
                       {profile?.full_name || user.email}
                     </p>
-                  </button>
-                  
+                  </Link>
+
                   <button
                     onClick={signOut}
                     className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors border border-gray-200 bg-white"
@@ -77,12 +74,7 @@ export default function DashboardHeader() {
         />
       )}
 
-      {/* User Profile Modal */}
-      {showUserProfile && (
-        <UserProfile
-          onClose={() => setShowUserProfile(false)}
-        />
-      )}
+      {/* User Profile Modal removed */}
     </>
   );
 }

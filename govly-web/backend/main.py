@@ -1,5 +1,6 @@
-from fastapi import FastAPI, HTTPException, Depends, Header
+from fastapi import FastAPI, HTTPException, Depends, Header, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from typing import List, Optional, Any, Dict
 import os
@@ -9,6 +10,7 @@ import tempfile
 import json
 import jwt
 from datetime import datetime, timedelta
+import shutil
 
 # Add current directory to Python path
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -80,6 +82,56 @@ for env_path in env_paths:
 else:
     print("⚠️  No .env file found in any expected location")
 
+async def should_trigger_rag(message: str, conversation_context: List[Dict[str, Any]], response_type: str, conversation_turns: int, max_turns: int) -> bool:
+    """
+    Determine if we should trigger RAG or continue with general chat for clarification.
+    Returns True if we should use RAG, False if we should continue clarification.
+    """
+    try:
+        # If this is the first turn and the query is very vague, ask for clarification first
+        if conversation_turns == 0:
+            vague_keywords = ['help', 'information', 'what', 'how', 'need', 'want', 'about', 'question']
+            if len(message.split()) <= 3 or any(word in message.lower() for word in vague_keywords):
+                return False
+
+        # If we've already hit max turns, force RAG (user might be frustrated)
+        if conversation_turns >= max_turns:
+            return True
+
+        # Quick LLM check to see if we have enough context for useful RAG
+        from simple_llm import send_to_sealion
+
+        # Build conversation summary
+        recent_context = ""
+        for msg in conversation_context[-6:]:  # Last 6 messages for context
+            role = msg.get('role', 'unknown')
+            content = msg.get('content', '')
+            recent_context += f"{role}: {content}\n"
+
+        prompt = f"""Analyze this conversation to determine if we have enough context to provide useful document/form recommendations.
+
+Current message: "{message}"
+Conversation history:
+{recent_context}
+
+Do we have enough specific details to recommend relevant government forms or documents? Consider:
+- Is the user's goal/need clear?
+- Do we know what type of service/document they want?
+- Are there still important unknowns that would make document recommendations unhelpful?
+
+Respond with just "YES" if we should search for documents, or "NO" if we need more clarification first."""
+
+        llm_response = send_to_sealion(prompt, max_tokens=10, temperature=0.1)
+        should_use = "yes" in llm_response.lower().strip()
+
+        print(f"DEBUG: RAG confidence check - Response: {llm_response.strip()}, Should use RAG: {should_use}")
+        return should_use
+
+    except Exception as e:
+        print(f"DEBUG: Error in should_trigger_rag: {e}")
+        # Fallback: If it's a form/link request and we have some context, use RAG
+        return response_type in ["ragLink", "ragForm"] and conversation_turns >= 2
+
 from fastapi.staticfiles import StaticFiles
 app = FastAPI(title="Govly API", version="1.0.0")
 
@@ -127,6 +179,87 @@ async def validation_exception_handler(request, exc):
 async def health_check():
     return {"status": "healthy", "service": "Govly Backend API"}
 
+# PDF serving endpoint for document viewer
+@app.get("/api/pdf/{filename}")
+async def serve_pdf(filename: str):
+    """Serve PDF files from the forms directory"""
+    try:
+        pdf_path = os.path.join(current_dir, "forms", filename)
+
+        if not os.path.exists(pdf_path):
+            raise HTTPException(status_code=404, detail="PDF file not found")
+
+        # Verify it's a PDF file
+        if not filename.lower().endswith('.pdf'):
+            raise HTTPException(status_code=400, detail="File is not a PDF")
+
+        return FileResponse(
+            pdf_path,
+            media_type='application/pdf',
+            filename=filename
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error serving PDF: {str(e)}")
+
+# File upload endpoint for scan functionality
+@app.post("/api/upload")
+async def upload_file(file: UploadFile = File(...)):
+    """Handle file uploads for scan functionality"""
+    try:
+        # Validate file type and extension
+        allowed_types = {
+            'application/pdf': '.pdf',
+            'image/jpeg': '.jpg',
+            'image/jpg': '.jpg',
+            'image/png': '.png'
+        }
+        if file.content_type not in allowed_types:
+            raise HTTPException(status_code=400, detail="File type not supported. Please upload PDF or image files (JPEG, PNG).")
+            
+        # Ensure file has correct extension
+        file_ext = os.path.splitext(file.filename)[1].lower()
+        expected_ext = allowed_types[file.content_type]
+        if file_ext not in ['.pdf', '.jpg', '.jpeg', '.png']:
+            raise HTTPException(status_code=400, detail=f"Invalid file extension. Expected {expected_ext} for {file.content_type}")
+
+        # Validate file size (10MB limit)
+        file_size = 0
+        file_content = await file.read()
+        file_size = len(file_content)
+
+        if file_size > 10 * 1024 * 1024:  # 10MB
+            raise HTTPException(status_code=400, detail="File size exceeds 10MB limit.")
+
+        # Save file to the forms directory
+        forms_dir = os.path.join(current_dir, "forms")
+        os.makedirs(forms_dir, exist_ok=True)
+
+        # Generate unique filename to avoid conflicts
+        file_extension = os.path.splitext(file.filename)[1]
+        unique_filename = f"{int(datetime.now().timestamp())}_{file.filename}"
+        file_path = os.path.join(forms_dir, unique_filename)
+
+        # Write file to disk
+        with open(file_path, "wb") as buffer:
+            buffer.write(file_content)
+
+        # Return the file URL/path for further processing
+        return {
+            "success": True,
+            "filename": unique_filename,
+            "url": unique_filename,  # This will be used by extractFormPreprocessed
+            "size": file_size,
+            "content_type": file.content_type
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"💥 Upload error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+
 # ---------------- Models ----------------
 from typing import Optional
 
@@ -159,6 +292,102 @@ class AgencyDetectionRequest(BaseModel):
     query: str
     country: str
     conversationContext: list = []
+
+class DocumentChatRequest(BaseModel):
+    message: str
+    documentId: str
+    documentTitle: str
+    documentContent: str
+    documentType: str = "pdf"
+    conversationContext: List[Dict[str, Any]] = []
+
+# ---------------- Document-Aware Chat endpoint ----------------
+@app.post("/api/documentChat")
+async def document_chat(request: DocumentChatRequest):
+    """AI chat endpoint specifically for document analysis and Q&A"""
+    try:
+        print(f"📖 Document chat request for: {request.documentTitle}")
+
+        # Get SEA-LION API key
+        api_key = os.getenv("SEA_LION_API_KEY")
+        if not api_key:
+            raise HTTPException(status_code=500, detail="SEA-LION API key not configured")
+
+        # Initialize the LLM
+        from simple_llm import SimpleSeaLionLLM
+        llm = SimpleSeaLionLLM(
+            api_key=api_key,
+            model="aisingapore/Llama-SEA-LION-v3-70B-IT",
+            temperature=0.3,  # Lower temperature for more focused document analysis
+            max_tokens=500
+        )
+
+        # Build context from conversation history
+        conversation_context = ""
+        if request.conversationContext:
+            for msg in request.conversationContext[-5:]:  # Last 5 messages for context
+                role = msg.get("role", "").title()
+                content = msg.get("content", "")
+                conversation_context += f"{role}: {content}\n"
+
+        # Create document-aware prompt
+        prompt = f"""You are an AI assistant helping users understand and analyze documents.
+
+DOCUMENT INFORMATION:
+Title: {request.documentTitle}
+Type: {request.documentType}
+
+DOCUMENT CONTENT:
+{request.documentContent[:3000]}  # First 3000 chars to avoid token limits
+
+CONVERSATION HISTORY:
+{conversation_context}
+
+USER QUESTION: {request.message}
+
+Please provide a helpful, accurate response based on the document content. When referencing specific information:
+1. Quote the relevant sections exactly as they appear
+2. Indicate which section/heading the information comes from
+3. If discussing fees, timelines, or requirements, be specific with numbers and details
+4. Format your response clearly with bullet points or numbered lists when appropriate
+
+CRITICAL: At the end of your response, if you referenced specific sections, add a "REFERENCED_SECTIONS" list with EXACT text snippets or headings that appear in the document. These will be used to auto-scroll and highlight the document. Use the exact wording from the document (e.g., if the document has "## Key Requirements", use "Key Requirements" not "Requirements").
+
+Example format:
+Your response here...
+
+REFERENCED_SECTIONS: "Processing Time", "Required Documents", "Fees Structure"
+
+Respond in a clear, professional manner."""
+
+        # Get AI response
+        response = llm._call(prompt)
+
+        # Parse out referenced sections for auto-scrolling
+        referenced_sections = []
+        if "REFERENCED_SECTIONS" in response:
+            sections_part = response.split("REFERENCED_SECTIONS")[-1]
+            # Clean response to remove the referenced sections part
+            clean_response = response.split("REFERENCED_SECTIONS")[0].strip()
+
+            # Extract section references
+            import re
+            section_matches = re.findall(r'"([^"]+)"', sections_part)
+            referenced_sections = section_matches[:3]  # Limit to 3 sections
+        else:
+            clean_response = response
+
+        return {
+            "response": clean_response,
+            "referencedSections": referenced_sections,
+            "documentId": request.documentId,
+            "timestamp": datetime.now().isoformat()
+        }
+
+    except Exception as e:
+        print(f"💥 Document chat error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 # ---------------- Chat endpoint (LangChain version) ----------------
 @app.post("/api/chat")
@@ -230,24 +459,41 @@ async def smart_chat(request: ChatRequest):
         # No hardcoded mappings - let LLM handle everything
         user_country = request.country
         
+        # Count conversation turns to understand how much context we have
+        conversation_turns = len([msg for msg in request.conversationContext if msg.get('role') == 'user'])
+        max_clarification_turns = 5
+
+        print(f"DEBUG: Conversation turns: {conversation_turns}")
+
         # LLM-based intent detection for routing
         detected_category, needs_agency, suggested_agencies, llm_response_type = await detect_intent_with_llm(request.message, country, language)
-        
-        # Use LLM's response_type for routing instead of settings
-        response_type = llm_response_type
-        
+
+        # Analyze conversation context to determine if we have enough information for RAG
+        should_use_rag = await should_trigger_rag(request.message, request.conversationContext, llm_response_type, conversation_turns, max_clarification_turns)
+
+        print(f"DEBUG: Should use RAG: {should_use_rag}")
+        print(f"DEBUG: LLM Response type: {llm_response_type}")
+
+        # If we don't have enough context and haven't exceeded max turns, use general chat for clarification
+        if not should_use_rag and conversation_turns < max_clarification_turns and llm_response_type in ["ragLink", "ragForm"]:
+            print(f"DEBUG: Using general chat for clarification (turn {conversation_turns + 1}/{max_clarification_turns})")
+            response_type = "chat"  # Force general chat for clarification
+        else:
+            # Use LLM's response_type for routing
+            response_type = llm_response_type
+
         # Determine if we should offer agency choice
         should_offer_agency = (
-            needs_agency and 
-            not selected_agency and 
+            needs_agency and
+            not selected_agency and
             response_type == "agency"
         )
-        
+
         # Debug prints for smart routing
         print(f"DEBUG: Message: {request.message}")
         print(f"DEBUG: LLM Detected category: {detected_category}")
         print(f"DEBUG: LLM Needs agency: {needs_agency}")
-        print(f"DEBUG: LLM Response type: {llm_response_type}")
+        print(f"DEBUG: Final response type: {response_type}")
         print(f"DEBUG: Should offer agency: {should_offer_agency}")
         print(f"DEBUG: LLM Suggested agencies: {suggested_agencies}")
         
@@ -327,12 +573,17 @@ async def smart_chat(request: ChatRequest):
         elif response_type == "general":
             print(f"DEBUG: Routing to: General Chat")
             # Route to general chat
-            return await chat(request)
-            
+            return await chat(request, current_user=None)
+
+        elif response_type == "chat":
+            print(f"DEBUG: Routing to: General Chat for clarification")
+            # Route to general chat for clarification
+            return await chat(request, current_user=None)
+
         else:
             print(f"DEBUG: Unknown response type: {response_type}, routing to General Chat")
             # Route to general chat as fallback
-            return await chat(request)
+            return await chat(request, current_user=None)
         
         print(f"DEBUG: ===== SMARTCHAT END =====")
             
@@ -857,10 +1108,11 @@ async def extract_form_fallback(request: ExtractFormRequest):
 
         # Clean OCR text and process with LangChain
         cleaned_text = clean_ocr_text(text)
-        
+
         # Get LangChain form processing handler
         form_chain = get_form_chain()
         fields_json = form_chain.extract_form_fields(cleaned_text)
+        print(f"🤖 LangChain form extraction response: {fields_json}")
 
         if "error" in fields_json:
             print("❌ Form extraction error:", fields_json)

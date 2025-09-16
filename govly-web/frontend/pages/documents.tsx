@@ -16,103 +16,80 @@ interface Document {
   size?: string; // For PDFs
 }
 
-// Hardcoded documents for now
+// Hardcoded documents using real PDFs and government websites
 const SAMPLE_DOCUMENTS: Document[] = [
   {
     id: '1',
-    title: 'Vietnam Business Registration Guide 2024',
+    title: 'Giấy chứng nhận đăng ký doanh nghiệp - Công ty cổ phần',
     type: 'pdf',
     category: 'Business',
-    description: 'Complete guide for registering a business in Vietnam, including all required forms and procedures.',
-    url: '/documents/business-registration-guide.pdf',
+    description: 'Business registration certificate for joint stock companies in Vietnam.',
+    url: '/api/pdf/vietmy-giay-chung-nhan-dang-ky-doanh-nghiep-cong-ty-co-phan.pdf',
     dateAdded: '2024-09-15',
     author: 'Ministry of Planning and Investment',
-    tags: ['business', 'registration', 'guide'],
-    size: '2.4 MB'
+    tags: ['business', 'registration', 'certificate'],
+    size: '2.1 MB'
   },
   {
     id: '2',
-    title: 'Housing Permit Application Requirements',
-    type: 'link',
+    title: 'Đơn xin xác nhận có đất ở hợp pháp',
+    type: 'pdf',
     category: 'Housing',
-    description: 'Official government webpage detailing housing permit application requirements and procedures.',
-    url: 'https://example.gov.vn/housing-permits',
-    dateAdded: '2024-09-10',
-    author: 'Ministry of Construction',
-    tags: ['housing', 'permits', 'requirements']
-  },
-  {
-    id: '3',
-    title: 'Tax Certificate Application Form',
-    type: 'pdf',
-    category: 'Tax',
-    description: 'Official form for applying for tax certificates and related documentation.',
-    url: '/documents/tax-certificate-form.pdf',
-    dateAdded: '2024-09-08',
-    author: 'General Department of Taxation',
-    tags: ['tax', 'certificate', 'form'],
-    size: '1.1 MB'
-  },
-  {
-    id: '4',
-    title: 'Enterprise License Procedures',
-    type: 'link',
-    category: 'Business',
-    description: 'Step-by-step procedures for obtaining various types of enterprise licenses.',
-    url: 'https://example.gov.vn/enterprise-licenses',
-    dateAdded: '2024-09-05',
-    author: 'Department of Business Registration',
-    tags: ['enterprise', 'license', 'procedures']
-  },
-  {
-    id: '5',
-    title: 'Construction Permit Guidelines',
-    type: 'pdf',
-    category: 'Construction',
-    description: 'Comprehensive guidelines for obtaining construction permits in urban and rural areas.',
-    url: '/documents/construction-permit-guidelines.pdf',
-    dateAdded: '2024-09-01',
-    author: 'Ministry of Construction',
-    tags: ['construction', 'permit', 'guidelines'],
-    size: '3.2 MB'
-  },
-  {
-    id: '6',
-    title: 'Investment Law Documentation',
-    type: 'link',
-    category: 'Investment',
-    description: 'Official documentation of Vietnam\'s investment law and related regulations.',
-    url: 'https://example.gov.vn/investment-law',
-    dateAdded: '2024-08-28',
-    author: 'Ministry of Planning and Investment',
-    tags: ['investment', 'law', 'regulations']
-  },
-  {
-    id: '7',
-    title: 'Import-Export License Application',
-    type: 'pdf',
-    category: 'Trade',
-    description: 'Application forms and procedures for import-export licenses.',
-    url: '/documents/import-export-license.pdf',
-    dateAdded: '2024-08-25',
-    author: 'Ministry of Industry and Trade',
-    tags: ['import', 'export', 'license'],
+    description: 'Application form for legal residential land confirmation in Vietnam.',
+    url: '/api/pdf/Mẫu_đơn_xin_xác_nhận_có_đất_ở_hợp_pháp.pdf',
+    dateAdded: '2024-09-14',
+    author: 'Ministry of Natural Resources and Environment',
+    tags: ['housing', 'land', 'confirmation'],
     size: '1.8 MB'
   },
   {
-    id: '8',
-    title: 'Social Insurance Registration',
+    id: '3',
+    title: 'Mẫu số 16 - Phụ lục I (Form Template)',
+    type: 'pdf',
+    category: 'Administrative',
+    description: 'Official government form template for administrative procedures.',
+    url: '/api/pdf/8_5_2025_32_14_636_mau-so-16---phu-luc-i.pdf',
+    dateAdded: '2024-09-13',
+    author: 'Government Administrative Office',
+    tags: ['form', 'administrative', 'template'],
+    size: '1.2 MB'
+  },
+  {
+    id: '4',
+    title: 'FAQ - Frequently Asked Questions',
     type: 'link',
-    category: 'Social Services',
-    description: 'Information and procedures for social insurance registration for employees.',
-    url: 'https://example.gov.vn/social-insurance',
-    dateAdded: '2024-08-20',
-    author: 'Vietnam Social Security',
-    tags: ['social', 'insurance', 'registration']
+    category: 'Support',
+    description: 'Frequently asked questions about government services and procedures from Ministry of Industry and Trade.',
+    url: 'https://dichvucong.moit.gov.vn/FAQ.aspx',
+    dateAdded: '2024-09-12',
+    author: 'Ministry of Industry and Trade',
+    tags: ['faq', 'support', 'questions']
+  },
+  {
+    id: '5',
+    title: 'Business Support Services',
+    type: 'link',
+    category: 'Business',
+    description: 'Business support hotline and consultation services from Ministry of Industry and Trade.',
+    url: 'https://dichvucong.moit.gov.vn/SupportPhone.aspx',
+    dateAdded: '2024-09-11',
+    author: 'Ministry of Industry and Trade',
+    tags: ['business', 'support', 'hotline']
+  },
+  {
+    id: '6',
+    title: 'E-commerce Registration Services',
+    type: 'link',
+    category: 'E-commerce',
+    description: 'Registration and amendment services for e-commerce business applications.',
+    url: 'https://dichvucong.moit.gov.vn/VdxpTTHCOnlineDetail.aspx?DocId=254',
+    dateAdded: '2024-09-10',
+    author: 'Ministry of Industry and Trade',
+    tags: ['ecommerce', 'registration', 'amendments']
   }
 ];
 
-const CATEGORIES = ['All', 'Business', 'Housing', 'Tax', 'Construction', 'Investment', 'Trade', 'Social Services'];
+const CATEGORIES = ['All', 'Business', 'Housing', 'Administrative', 'Support', 'E-commerce'];
 
 export default function DocumentsPage() {
   const router = useRouter();
@@ -242,7 +219,7 @@ export default function DocumentsPage() {
             <div
               key={doc.id}
               onClick={() => handleDocumentClick(doc)}
-              className="bg-white rounded-xl border border-gray-200 p-6 hover:shadow-lg hover:border-red-300 transition-all duration-200 cursor-pointer group"
+              className="bg-white rounded-xl border border-gray-200 p-6 hover:shadow-lg hover:border-red-300 transition-all duration-200 cursor-pointer group relative flex flex-col"
             >
               {/* Document Header */}
               <div className="flex items-start justify-between mb-4">
@@ -300,8 +277,8 @@ export default function DocumentsPage() {
                 )}
               </div>
 
-              {/* Document Meta */}
-              <div className="flex items-center justify-between text-xs text-gray-500 pt-4 border-t border-gray-100">
+              {/* Document Meta (stick to bottom) */}
+              <div className="mt-auto flex items-center justify-between text-xs text-gray-500 pt-4 border-t border-gray-100">
                 <div className="flex items-center gap-4">
                   <div className="flex items-center gap-1">
                     <Calendar className="w-3 h-3" />
