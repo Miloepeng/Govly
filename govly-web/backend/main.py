@@ -459,6 +459,18 @@ async def rag_form_search(request: FormRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+# ---------------- Form search endpoint (for frontend compatibility) ----------------
+@app.post("/api/forms")
+async def form_search(request: FormRequest):
+    """Search forms using RAG - same as /api/ragForm but with different endpoint name."""
+    try:
+        # Use the same form search logic as ragForm
+        results = search_forms_llamaindex(request.query, top_k=5, country=request.country)
+        return {"results": results}
+    except Exception as e:
+        print(f"❌ Error in form search: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 # ---------------- Extract Form endpoint (new) ----------------
 def map_field_type(ftype: str) -> str:

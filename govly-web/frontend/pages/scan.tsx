@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import { useRouter } from 'next/router';
 import { Upload, FileText, Image, Loader2, AlertCircle, CheckCircle, ArrowLeft, ChevronLeft, ChevronRight, Search } from 'lucide-react';
 import DynamicForm from '../components/DynamicForm';
@@ -44,6 +44,9 @@ function CustomDynamicForm({
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<{ field: string; label: string; index: number; value: string }[]>([]);
   const [autofillSuggestions, setAutofillSuggestions] = useState<Record<string, string>>({});
+  const [currentApplicationId, setCurrentApplicationId] = useState<string | null>(null);
+  const [lastSaved, setLastSaved] = useState<string | null>(null);
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Generate autofill suggestions when profile or schema changes
@@ -62,8 +65,58 @@ function CustomDynamicForm({
   const totalFields = schema.fields.length;
   const progress = ((currentFieldIndex + 1) / totalFields) * 100;
 
+  // Calculate completion percentage
+  const calculateCompletionPercentage = useCallback((data: Record<string, any>) => {
+    const totalFields = schema.fields.length;
+    const filledFields = Object.values(data).filter(value => 
+      value !== null && value !== undefined && value !== ''
+    ).length;
+    return Math.round((filledFields / totalFields) * 100);
+  }, [schema.fields.length]);
+
+  // Auto-save function
+  const autoSave = useCallback(async (data: Record<string, any>) => {
+    if (!user || !schema.fields.length) return;
+
+    const completionPercentage = calculateCompletionPercentage(data);
+    const formTitle = `Scanned Form - ${detectedAgency?.name || 'Government Form'}`;
+
+    try {
+      const { error, applicationId } = await ApplicationService.savePartialForm(
+        user.id,
+        formTitle,
+        data,
+        schema,
+        completionPercentage
+      );
+
+      if (!error && applicationId) {
+        setCurrentApplicationId(applicationId);
+        setLastSaved(new Date().toLocaleTimeString());
+      }
+    } catch (err) {
+      console.error('Auto-save failed:', err);
+    }
+  }, [user, schema, detectedAgency, calculateCompletionPercentage]);
+
+  // Debounced auto-save
+  const debouncedAutoSave = useCallback((data: Record<string, any>) => {
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+    }
+    
+    saveTimeoutRef.current = setTimeout(() => {
+      autoSave(data);
+    }, 2000); // Save 2 seconds after last change
+  }, [autoSave]);
+
   const handleChange = (name: string, value: any) => {
-    setFormData((prev) => ({ ...prev, [name]: value }));
+    setFormData((prev) => {
+      const newData = { ...prev, [name]: value };
+      // Temporarily disable auto-save to focus on submit button fix
+      // debouncedAutoSave(newData);
+      return newData;
+    });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -77,7 +130,13 @@ function CustomDynamicForm({
     setIsSubmitting(true);
 
     try {
-      // Create application object for scan page
+      // Clear any pending auto-save
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+
+      // Always create a new application with 'applied' status for now
+      // This ensures it works regardless of database schema
       const application = {
         id: Date.now().toString(),
         formTitle: `Scanned Form - ${detectedAgency?.name || 'Government Form'}`,
@@ -91,20 +150,23 @@ function CustomDynamicForm({
           applied: { date: new Date().toISOString(), completed: true },
           reviewed: { date: null, completed: false },
           confirmed: { date: null, completed: false }
-        }
+        },
+        completionPercentage: calculateCompletionPercentage(formData),
+        lastSaved: new Date().toISOString()
       };
 
-      // Save to Supabase
       const { error } = await ApplicationService.saveApplication(user.id, application);
 
       if (error) {
-        alert("Failed to save application. Please try again.");
+        console.error('Submit error:', error);
+        alert(`Failed to save application: ${error.message || 'Unknown error'}`);
         return;
       }
 
       onSubmission();
     } catch (error) {
-      alert("Failed to save application. Please try again.");
+      console.error('Submit error:', error);
+      alert(`Failed to save application: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setIsSubmitting(false);
     }

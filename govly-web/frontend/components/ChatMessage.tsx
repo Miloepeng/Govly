@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Message } from '../types/chat';
 import ReactMarkdown from 'react-markdown';
 import DynamicForm from './DynamicForm';
+import { supabase } from '../lib/supabase';
 
 interface ChatMessageProps {
   message: Message & { formSchema?: any };
@@ -126,9 +127,7 @@ export default function ChatMessage({
     } catch (err) {
       console.error('Error extracting form:', err);
     } finally {
-      if (!extractedFormSchema) {
-        setIsLoadingForm(false);
-      }
+      setIsLoadingForm(false);
     }
   };
 
@@ -265,9 +264,7 @@ export default function ChatMessage({
                           } catch (err) {
                             console.error('Error extracting form:', err);
                           } finally {
-                            if (!extractedFormSchema) {
-                              setIsLoadingForm(false);
-                            }
+                            setIsLoadingForm(false);
                           }
                         }}
                       >
@@ -333,9 +330,7 @@ export default function ChatMessage({
                             } catch (err) {
                               console.error('Error extracting form:', err);
                             } finally {
-                              if (!extractedFormSchema) {
-                                setIsLoadingForm(false);
-                              }
+                              setIsLoadingForm(false);
                             }
                           }}
                           title="Click to load this form"
@@ -395,6 +390,53 @@ export default function ChatMessage({
                   }}
                   chatHistory={chatHistory}
                 />
+              </div>
+            )}
+
+            {/* --- Continue Application Form --- */}
+            {message.formSchema && message.formState && (
+              <div className="mt-4 bg-white rounded-xl border border-gray-200 shadow-sm">
+                <div className="p-4 border-b border-gray-100">
+                  <h3 className="text-lg font-semibold text-gray-900">
+                    📝 {message.formSchema.fields?.[0]?.label || 'Government Form'}
+                  </h3>
+                  <p className="text-sm text-gray-600 mt-1">
+                    Continue filling out your form
+                  </p>
+                </div>
+                <div className="p-4">
+                  <DynamicForm
+                    schema={message.formSchema}
+                    formState={message.formState}
+                    chatHistory={chatHistory}
+                    onAskClarification={(fieldName, label) => {
+                      // Handle field clarification requests
+                      console.log(`Need clarification for: ${fieldName} - ${label}`);
+                    }}
+                    onFormUpdate={message.continuingApplicationId ? async (formData) => {
+                      // Update the application in the database
+                      try {
+                        const { error } = await supabase
+                          .from('user_applications')
+                          .update({
+                            form_data: formData,
+                            last_saved: new Date().toISOString(),
+                            updated_at: new Date().toISOString()
+                          })
+                          .eq('id', message.continuingApplicationId);
+                        
+                        if (error) {
+                          console.error('Error updating form data:', error);
+                        } else {
+                          console.log('✅ Application form data updated successfully');
+                          // You could add a toast notification here if needed
+                        }
+                      } catch (error) {
+                        console.error('Error in form update:', error);
+                      }
+                    } : undefined}
+                  />
+                </div>
               </div>
             )}
 

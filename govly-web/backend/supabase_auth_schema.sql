@@ -27,12 +27,14 @@ CREATE TABLE IF NOT EXISTS user_applications (
     form_title TEXT NOT NULL,
     form_data JSONB NOT NULL,
     schema JSONB,
-    status TEXT DEFAULT 'applied' CHECK (status IN ('applied', 'reviewed', 'confirmed')),
+    status TEXT DEFAULT 'applied' CHECK (status IN ('draft', 'applied', 'reviewed', 'confirmed')),
     progress JSONB DEFAULT '{
         "applied": {"date": null, "completed": false},
         "reviewed": {"date": null, "completed": false},
         "confirmed": {"date": null, "completed": false}
     }'::jsonb,
+    completion_percentage INTEGER DEFAULT 0,
+    last_saved TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );

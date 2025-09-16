@@ -1,10 +1,19 @@
 /** @type {import('next').NextConfig} */
+const path = require('path')
+const dotenv = require('dotenv')
+
+// Load environment variables from parent directory
+dotenv.config({ path: path.resolve(__dirname, '../.env') })
+
 const nextConfig = {
   async rewrites() {
+    // Use environment variable or fallback to localhost for development
+    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000'
+    
     return [
       {
         source: '/api/:path*',
-        destination: 'http://backend:8000/api/:path*',  // Docker service name
+        destination: `${backendUrl}/api/:path*`,
       },
     ]
   },

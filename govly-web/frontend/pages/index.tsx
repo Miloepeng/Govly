@@ -53,6 +53,7 @@ export default function Home() {
     }
   };
 
+
   const handleConfirmDeleteChat = () => {
     // Delete current chat from localStorage if it exists
     if (currentChatId) {
@@ -266,6 +267,54 @@ export default function Home() {
   useEffect(() => {
     saveCurrentConversation(messages);
   }, [messages]);
+
+  // Check for continue application data from status page
+  useEffect(() => {
+    const continueAppData = localStorage.getItem('continueApplication');
+    if (continueAppData) {
+      try {
+        const appData = JSON.parse(continueAppData);
+        console.log('🔄 Continuing application in chat:', appData);
+        
+        // Set the form schema and state
+        if (appData.schema) {
+          setFormSchema(appData.schema);
+          setCurrentFormSchema(appData.schema);
+        }
+        
+        
+        // Convert form data to form state format
+        let formStateArray: Array<{ name: string; value: string }> = [];
+        if (appData.formData) {
+          formStateArray = Object.entries(appData.formData).map(([name, value]) => ({
+            name,
+            value: value as string
+          }));
+          setFormState(formStateArray);
+        }
+        
+        // Add a message to the chat with the form embedded
+        const continueMessage: Message = {
+          id: Date.now().toString(),
+          role: 'assistant',
+          content: `📝 Continuing your application: **${appData.formTitle}**\n\nI've loaded your previous form data. You can continue filling out the form below or ask me questions about it.`,
+          timestamp: new Date(),
+          formSchema: appData.schema,
+          formState: formStateArray,
+          continuingApplicationId: appData.id
+        };
+        
+        setMessages(prev => [...prev, continueMessage]);
+        
+        // Clear the continue application data
+        localStorage.removeItem('continueApplication');
+        
+      } catch (error) {
+        console.error('Error parsing continue application data:', error);
+        localStorage.removeItem('continueApplication');
+      }
+    }
+  }, []); // Run once on mount
 
 
   useEffect(() => {
@@ -1087,6 +1136,7 @@ export default function Home() {
                   Upload Form
                 </button>
               </div>
+
 
             <div className="flex items-center gap-2 modern-input px-4 py-2">
               <input

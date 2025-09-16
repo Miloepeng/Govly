@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { ChevronLeft, ChevronRight, Search, ArrowLeft, ArrowRight } from "lucide-react";
 import { useAuth } from '../contexts/AuthContext';
 import { ApplicationService } from '../lib/applicationService';
@@ -23,6 +23,7 @@ export default function DynamicForm({
   formState,
   chatHistory,
   userProfile,
+  onFormUpdate,
 }: {
   schema: Schema;
   onAskClarification?: (fieldName: string, label: string) => void;
@@ -30,10 +31,14 @@ export default function DynamicForm({
   formState?: Record<string, any>[];
   chatHistory?: Array<{ role: string; content: string }>;
   userProfile?: any; // UserProfile from AuthContext
+  onFormUpdate?: (formData: Record<string, any>) => void;
 }) {
   const { user, profile } = useAuth();
   const [formData, setFormData] = useState<Record<string, any>>({});
   const [currentFieldIndex, setCurrentFieldIndex] = useState(0);
+  const [currentApplicationId, setCurrentApplicationId] = useState<string | null>(null);
+  const [lastSaved, setLastSaved] = useState<string | null>(null);
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<{ field: string; value: string }[]>([]);
   const [autofillSuggestions, setAutofillSuggestions] = useState<Record<string, string>>({});
@@ -46,8 +51,30 @@ export default function DynamicForm({
         mapped[f.name] = f.value;
       });
       setFormData(mapped);
+      
+      // Find the first unfilled field to set the current field index
+      if (schema && schema.fields) {
+        const firstUnfilledIndex = schema.fields.findIndex(field => 
+          !mapped[field.name] || mapped[field.name].trim() === ''
+        );
+        if (firstUnfilledIndex !== -1) {
+          setCurrentFieldIndex(firstUnfilledIndex);
+        } else {
+          // All fields are filled, go to the last field
+          setCurrentFieldIndex(schema.fields.length - 1);
+        }
+      }
     }
-  }, [formState]);
+  }, [formState, schema]);
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // Generate autofill suggestions when profile or schema changes
   useEffect(() => {
@@ -67,9 +94,6 @@ export default function DynamicForm({
     }
   }, [externalUpdate]);
 
-  useEffect(() => {
-    if (formState) setFormData(formState);
-  }, [formState]);
 
   if (!schema || !schema.fields || schema.fields.length === 0) {
     return <p className="text-gray-500">No form fields available.</p>;
@@ -79,45 +103,117 @@ export default function DynamicForm({
   const totalFields = schema.fields.length;
   const progress = ((currentFieldIndex + 1) / totalFields) * 100;
 
+  // Calculate completion percentage
+  const calculateCompletionPercentage = useCallback((data: Record<string, any>) => {
+    const totalFields = schema.fields.length;
+    const filledFields = Object.values(data).filter(value => 
+      value !== null && value !== undefined && value !== ''
+    ).length;
+    return Math.round((filledFields / totalFields) * 100);
+  }, [schema.fields.length]);
+
+  // Auto-save function
+  const autoSave = useCallback(async (data: Record<string, any>) => {
+    if (!user || !schema.fields.length) return;
+
+    const completionPercentage = calculateCompletionPercentage(data);
+    const formTitle = schema.fields[0]?.label || "Government Form";
+
+    try {
+      const { error, applicationId } = await ApplicationService.savePartialForm(
+        user.id,
+        formTitle,
+        data,
+        schema,
+        completionPercentage
+      );
+
+      if (!error && applicationId) {
+        setCurrentApplicationId(applicationId);
+        setLastSaved(new Date().toLocaleTimeString());
+      }
+    } catch (err) {
+      console.error('Auto-save failed:', err);
+    }
+  }, [user, schema, calculateCompletionPercentage]);
+
+  // Debounced auto-save
+  const debouncedAutoSave = useCallback((data: Record<string, any>) => {
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+    }
+    
+    saveTimeoutRef.current = setTimeout(() => {
+      autoSave(data);
+    }, 2000); // Save 2 seconds after last change
+  }, [autoSave]);
+
   const handleChange = (name: string, value: any) => {
-    setFormData((prev) => ({ ...prev, [name]: value }));
+    setFormData((prev) => {
+      const newData = { ...prev, [name]: value };
+      
+      // If we have an onFormUpdate callback (for continuing applications), call it
+      if (onFormUpdate) {
+        onFormUpdate(newData);
+      } else {
+        // Otherwise, use the normal auto-save behavior
+        // Temporarily disable auto-save to focus on submit button fix
+        // debouncedAutoSave(newData);
+      }
+      
+      return newData;
+    });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    console.log('🚀 Submit button clicked!', { user: user?.id, formData });
     
     if (!user) {
       alert("Please sign in to submit applications.");
       return;
     }
     
-    // Create application object
-    const application = {
-      id: Date.now().toString(),
-      formTitle: schema.fields[0]?.label || "Government Form",
-      dateApplied: new Date().toISOString(),
-      status: "applied" as const,
-      formData: formData,
-      schema: schema,
-      progress: {
-        applied: { date: new Date().toISOString(), completed: true },
-        reviewed: { date: null, completed: false },
-        confirmed: { date: null, completed: false }
-      }
-    };
-
     try {
-      // Save to Supabase
+      // Clear any pending auto-save
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+
+      // Always create a new application with 'applied' status for now
+      // This ensures it works regardless of database schema
+      const application = {
+        id: Date.now().toString(),
+        formTitle: schema.fields[0]?.label || "Government Form",
+        dateApplied: new Date().toISOString(),
+        status: "applied" as const,
+        formData: formData,
+        schema: schema,
+        progress: {
+          applied: { date: new Date().toISOString(), completed: true },
+          reviewed: { date: null, completed: false },
+          confirmed: { date: null, completed: false }
+        },
+        completionPercentage: calculateCompletionPercentage(formData),
+        lastSaved: new Date().toISOString()
+      };
+
+      console.log('📤 Saving application:', application);
+
       const { error } = await ApplicationService.saveApplication(user.id, application);
       
       if (error) {
-        alert("Failed to save application. Please try again.");
+        console.error('❌ Submit error:', error);
+        alert(`Failed to save application: ${error.message || 'Unknown error'}`);
         return;
       }
 
+      console.log('✅ Application saved successfully!');
       alert("Application submitted and saved! You can track it on the Status page.");
     } catch (error) {
-      alert("Failed to save application. Please try again.");
+      console.error('💥 Submit error:', error);
+      alert(`Failed to save application: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };
 
@@ -180,6 +276,8 @@ export default function DynamicForm({
     try {
       setIsAIFilling(true);
       
+      console.log('🤖 Starting AI fill process...');
+      
       // Use chat history from parent component, fallback to localStorage if not provided
       let filteredHistory = chatHistory || [];
       
@@ -191,9 +289,16 @@ export default function DynamicForm({
         }));
       }
 
+      console.log('📚 Chat history sources:', {
+        fromParent: chatHistory?.length || 0,
+        fromLocalStorage: filteredHistory.length,
+        totalHistory: filteredHistory.length
+      });
+
       // Check if we have any chat history to work with
       if (filteredHistory.length === 0) {
         alert("⚠️ No chat history found. Please have a conversation first so AI can understand what to fill in.");
+        setIsAIFilling(false);
         return;
       }
 
@@ -230,6 +335,8 @@ export default function DynamicForm({
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
       
+      console.log('🌐 Making API call to /api/fillForm...');
+      
       const response = await fetch("/api/fillForm", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -242,6 +349,12 @@ export default function DynamicForm({
       });
       
       clearTimeout(timeoutId);
+
+      console.log('📡 API response received:', {
+        status: response.status,
+        statusText: response.statusText,
+        ok: response.ok
+      });
 
       if (response.ok) {
         const data = await response.json();
@@ -290,8 +403,22 @@ export default function DynamicForm({
         }
       } else {
         const errorText = await response.text();
-        console.error("Failed to fill form with AI:", response.status, errorText);
-        alert(`❌ AI autofill failed: ${response.status} - ${errorText}`);
+        console.error("❌ Failed to fill form with AI:", {
+          status: response.status,
+          statusText: response.statusText,
+          errorText: errorText
+        });
+        
+        let errorMessage = `❌ AI autofill failed: ${response.status}`;
+        if (response.status === 500) {
+          errorMessage += " - Server error. Check if SEA_LION_API_KEY is configured.";
+        } else if (response.status === 404) {
+          errorMessage += " - API endpoint not found.";
+        } else {
+          errorMessage += ` - ${errorText}`;
+        }
+        
+        alert(errorMessage);
       }
     } catch (err) {
       console.error("Error in AI fill:", err);
@@ -347,6 +474,13 @@ export default function DynamicForm({
             style={{ width: `${progress}%` }}
           ></div>
         </div>
+        {/* Auto-save indicator */}
+        {lastSaved && (
+          <div className="mt-2 text-xs text-gray-500 flex items-center gap-1">
+            <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+            <span>Auto-saved at {lastSaved}</span>
+          </div>
+        )}
       </div>
 
       {/* Search Bar */}

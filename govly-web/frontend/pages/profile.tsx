@@ -15,7 +15,7 @@ interface FormState {
 }
 
 export default function ProfilePage() {
-  const { user } = useAuth();
+  const { user, profile, updateProfile } = useAuth();
   const [form, setForm] = useState<FormState>({
     full_name: '',
     email: user?.email || '',
@@ -31,50 +31,44 @@ export default function ProfilePage() {
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   useEffect(() => {
-    async function fetchProfile() {
-      if (!user?.id) return;
-
-      const supabase = getSupabase();
-      console.log('Fetching profile for user:', user.id);
-      
-      const { data, error } = await supabase
-        .from('user_profiles')
-        .select('*')
-        .eq('id', user.id)
-        .single();
-
-      if (error) {
-        console.log('Error fetching profile:', error);
-        return;
-      }
-
-      console.log('Profile data fetched:', data);
-      
-      if (data) {
-        setForm({
-          full_name: data.full_name || '',
-          email: data.email || user.email || '',
-          phone_number: data.phone_number || '',
-          id_number: data.id_number || '',
-          address: data.address || '',
-          date_of_birth: data.date_of_birth || '',
-          gender: data.gender || '',
-          nationality: data.nationality || 'Vietnamese',
-          occupation: data.occupation || ''
-        });
-      }
+    if (profile) {
+      setForm({
+        full_name: profile.full_name || '',
+        email: profile.email || user?.email || '',
+        phone_number: profile.phone_number || '',
+        id_number: profile.id_number || '',
+        address: profile.address || '',
+        date_of_birth: profile.date_of_birth || '',
+        gender: profile.gender || '',
+        nationality: profile.nationality || 'Vietnamese',
+        occupation: profile.occupation || ''
+      });
     }
-
-    fetchProfile();
-  }, [user]);
+  }, [profile, user]);
 
   function handleChange<K extends keyof FormState>(key: K, value: string) {
     setForm(prev => ({ ...prev, [key]: value }));
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    console.log('Form submitted:', form);
+    setIsSubmitting(true);
+    setMessage(null);
+
+    try {
+      console.log('Form submitted:', form);
+      const { error } = await updateProfile(form);
+      
+      if (error) {
+        setMessage({ type: 'error', text: error.message || 'Failed to save profile. Please try again.' });
+      } else {
+        setMessage({ type: 'success', text: 'Profile updated successfully!' });
+      }
+    } catch (err) {
+      setMessage({ type: 'error', text: 'An unexpected error occurred. Please try again.' });
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   if (!user) {
@@ -215,9 +209,10 @@ export default function ProfilePage() {
               <a href="/" className="px-4 py-2 rounded-xl border border-gray-200 text-gray-700 bg-white hover:bg-gray-50">Cancel</a>
               <button
                 type="submit"
-                className="px-5 py-2.5 rounded-xl text-white bg-red-600 hover:bg-red-700"
+                disabled={isSubmitting}
+                className="px-5 py-2.5 rounded-xl text-white bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
-                Save Profile
+                {isSubmitting ? 'Saving...' : 'Save Profile'}
               </button>
             </div>
           </div>

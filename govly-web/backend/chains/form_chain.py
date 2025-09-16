@@ -138,6 +138,12 @@ class FormProcessingChain:
         chain = self.form_filling_prompt | self.llm
         
         try:
+            # Debug: Log what we're sending to the LLM
+            print(f"🔍 Form chain input:")
+            print(f"  - Form schema fields: {len(form_schema.get('fields', []))}")
+            print(f"  - Chat history length: {len(limited_formatted_chat)}")
+            print(f"  - User profile length: {len(formatted_profile)}")
+            
             # Run the pipeline
             result = chain.invoke({
                 "form_schema": form_schema,
@@ -145,20 +151,48 @@ class FormProcessingChain:
                 "user_profile": formatted_profile
             })
             
+            print(f"🤖 LLM response length: {len(str(result))}")
+            print(f"📝 First 200 chars of response: {str(result)[:200]}...")
+            
             # Parse the JSON response
             parsed_result = self.try_parse_json(result)
+            
+            print(f"✅ Parsed result: {len(parsed_result.get('fields', []))} fields")
             
             return parsed_result
             
         except Exception as e:
             print(f"⚠️ Form filling failed: {e}")
+            import traceback
+            traceback.print_exc()
+            
             # Return empty fields as fallback
-            return {
-                "fields": [
-                    {"name": field.get("name", "unknown"), "value": "ASK_USER"}
-                    for field in form_schema.get("fields", [])
-                ]
-            }
+            fallback_fields = []
+            for field in form_schema.get("fields", []):
+                field_name = field.get("name", "unknown")
+                # Try to use FormAutofillService logic as fallback
+                fallback_value = "ASK_USER"
+                
+                # Simple fallback logic based on user profile
+                if user_profile:
+                    field_lower = field_name.lower()
+                    if "name" in field_lower and user_profile.get("full_name"):
+                        fallback_value = user_profile["full_name"]
+                    elif "email" in field_lower and user_profile.get("email"):
+                        fallback_value = user_profile["email"]
+                    elif "phone" in field_lower and user_profile.get("phone_number"):
+                        fallback_value = user_profile["phone_number"]
+                    elif "address" in field_lower and user_profile.get("address"):
+                        fallback_value = user_profile["address"]
+                    elif "id" in field_lower and user_profile.get("id_number"):
+                        fallback_value = user_profile["id_number"]
+                
+                fallback_fields.append({
+                    "name": field_name,
+                    "value": fallback_value
+                })
+            
+            return {"fields": fallback_fields}
     
     def extract_form_fields(self, form_text: str) -> Dict[str, Any]:
         """Process form field extraction using LLM"""

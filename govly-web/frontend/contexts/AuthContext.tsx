@@ -8,7 +8,7 @@ interface AuthContextType {
   session: Session | null
   loading: boolean
   signUp: (email: string, password: string, fullName: string) => Promise<{ error: any }>
-  signIn: (email: string, password: string) => Promise<{ error: any }>
+  signIn: (email: string, password: string) => Promise<{ error: any; session?: Session | null }>
   signOut: () => Promise<void>
   updateProfile: (updates: Partial<UserProfile>) => Promise<{ error: any }>
 }
@@ -94,7 +94,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           date_of_birth,
           gender,
           nationality,
-          occupation
+          occupation,
+          created_at,
+          updated_at
         `)
         .eq('id', userId)
         .single()

@@ -6,6 +6,9 @@ export interface Message {
   timestamp: Date;
   ragResults?: RAGResult[];
   formResults?: FormResult[];
+  formSchema?: any;
+  formState?: Array<{ name: string; value: string }>;
+  continuingApplicationId?: string;
 }
 
 export type ResponseType = 'smart' | 'ragLink' | 'ragForm';
