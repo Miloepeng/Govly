@@ -1,0 +1,24 @@
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Install dependencies
+COPY package.json package-lock.json* ./
+RUN npm ci
+
+# Copy source code
+COPY . .
+
+# Use Docker-specific config for backend connection
+COPY next.config.docker.js next.config.js
+
+EXPOSE 3000
+
+# Environment variables are provided by Docker Compose
+ENV PORT=3000
+ENV HOSTNAME="0.0.0.0"
+ENV NODE_ENV=development
+
+# Run in development mode with hot reloading
+# Next.js will use environment variables from Docker Compose
+CMD ["npm", "run", "dev"]

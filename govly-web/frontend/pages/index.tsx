@@ -1,18 +1,23 @@
 import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/router';
-import { Bot, Sparkles, Search, FileText, Check } from 'lucide-react';
-import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
-import { GearIcon, PaperPlaneIcon } from '@radix-ui/react-icons';
+import { Bot, Sparkles, Search, FileText, Check, Camera } from 'lucide-react';
+import { TrashIcon, PaperPlaneIcon } from '@radix-ui/react-icons';
 import ChatMessage from '../components/ChatMessage';
 import Sidebar from '../components/Sidebar';
 import { Message } from '../types/chat';
 import DynamicForm from '../components/DynamicForm';
+import { useSmartScroll } from '../hooks/useSmartScroll';
+import { useAuth } from '../contexts/AuthContext';
 
 export default function Home() {
   const router = useRouter();
+  const { user, profile, signOut } = useAuth();
+  const [currentChatId, setCurrentChatId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [chatTitle, setChatTitle] = useState<string>('New Chat');
+  const [isGeneratingTitle, setIsGeneratingTitle] = useState(false);
   const [loadingState, setLoadingState] = useState<'understanding' | 'finding' | 'found' | 'generating' | 'chat' | 'agency' | 'retrieving_links' | 'retrieving_forms' | null>(null);
   const [selectedButton, setSelectedButton] = useState<'smart' | 'ragLink' | 'ragForm'>('smart');
   const [settings, setSettings] = useState({
@@ -21,7 +26,6 @@ export default function Home() {
     thinkingMode: 'off',
   });
 
-  const [selectedCountry, setSelectedCountry] = useState('Vietnam');
   const [selectedLanguage, setSelectedLanguage] = useState('English');
   const [selectedCategory, setSelectedCategory] = useState<'housing' | 'business'>('housing');
   const [formSchema, setFormSchema] = useState<any>(null);
@@ -34,21 +38,59 @@ export default function Home() {
   const [selectedAgency, setSelectedAgency] = useState<string | null>(null);
   const [agencyDetection, setAgencyDetection] = useState<any>(null);
   const [isTyping, setIsTyping] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const handleUploadClick = () => {
+    fileInputRef.current?.click();
+  };
 
-  const countries = [
-    { name: 'Vietnam', flag: '🇻🇳' },
-    { name: 'Thailand', flag: '🇹🇭' },
-    { name: 'Singapore', flag: '🇸🇬' },
-    { name: 'Malaysia', flag: '🇲🇾' },
-    { name: 'Indonesia', flag: '🇮🇩' },
-    { name: 'Philippines', flag: '🇵🇭' },
-    { name: 'Myanmar', flag: '🇲🇲' },
-    { name: 'Cambodia', flag: '🇰🇭' },
-    { name: 'Laos', flag: '🇱🇦' },
-    { name: 'Brunei', flag: '🇧🇳' },
-    { name: 'East Timor', flag: '🇹🇱' },
-  ];
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      console.log('File selected:', file.name);
+      // TODO: Add file upload logic here
+    }
+  };
+
+  const handleConfirmDeleteChat = () => {
+    // Delete current chat from localStorage if it exists
+    if (currentChatId) {
+      localStorage.removeItem(`chat:${currentChatId}`);
+
+      // Update saved chats list
+      const savedChats = JSON.parse(localStorage.getItem('chatConversations') || '[]');
+      const updatedChats = savedChats.filter((chat: any) => chat.id !== currentChatId);
+      localStorage.setItem('chatConversations', JSON.stringify(updatedChats));
+
+      // Create new chat ID and redirect (refresh page)
+      const newChatId = `${Date.now()}`;
+      localStorage.setItem(`chat:${newChatId}`, JSON.stringify([]));
+      const newChats = [{ id: newChatId, title: 'New Chat', updatedAt: Date.now() }, ...updatedChats];
+      localStorage.setItem('chatConversations', JSON.stringify(newChats));
+
+      const search = new URLSearchParams(window.location.search);
+      search.set('chatId', newChatId);
+      window.location.href = `/${search.toString() ? `?${search.toString()}` : ''}`;
+    } else {
+      // If no current chat, just clear state
+      setMessages([]);
+      setCurrentChatId(null);
+      setFormSchema(null);
+      setLoadingState(null);
+      setIsLoading(false);
+      setChatTitle('New Chat');
+      setIsGeneratingTitle(false);
+      setSelectedAgency(null);
+      setAgencyDetection(null);
+      setCurrentFormSchema(null);
+      setFormState([]);
+      setPendingField(null);
+      setExternalUpdate(null);
+    }
+
+    setIsDeleteDialogOpen(false);
+  };
 
   const languages = [
     { name: 'Vietnamese', code: 'vi', flag: '🇻🇳' },
@@ -63,131 +105,150 @@ export default function Home() {
     { name: 'Chinese', code: 'zh', flag: '🇨🇳' },
   ];
 
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const chatContainerRef = useRef<HTMLDivElement>(null);
-  const [userHasScrolledUp, setUserHasScrolledUp] = useState(false);
+  // Use the smart scroll hook instead of manual scroll handling
+  const { 
+    userScrolledUp: userHasScrolledUp, 
+    scrollToBottom,
+    resetScrollState,
+    setUserScrolledUp: setUserHasScrolledUp
+  } = useSmartScroll({
+    containerSelector: '[data-chat-container]',
+    threshold: 100
+  });
 
-  const scrollToBottom = () => {
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+  // Function to generate chat title based on first 3 user messages
+  const generateChatTitle = async (userMessages: string[]) => {
+    if (userMessages.length < 3 || isGeneratingTitle) return;
+    
+    setIsGeneratingTitle(true);
+    try {
+      const response = await fetch('/api/generateChatTitle', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          messages: userMessages.slice(0, 3), // First 3 messages
+          language: selectedLanguage
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setChatTitle(data.title);
+        console.log('Generated chat title:', data.title);
+      }
+    } catch (error) {
+      console.error('Error generating chat title:', error);
+      // Fallback to first message truncated
+      const fallbackTitle = userMessages[0].length > 30 
+        ? userMessages[0].substring(0, 30) + '...' 
+        : userMessages[0];
+      setChatTitle(fallbackTitle);
+    } finally {
+      setIsGeneratingTitle(false);
     }
   };
 
-  // Check if user has manually scrolled up
-  const handleScroll = () => {
-    if (chatContainerRef.current) {
-      const { scrollTop, scrollHeight, clientHeight } = chatContainerRef.current;
-      const isNearBottom = scrollHeight - scrollTop - clientHeight < 100; // 100px threshold
-      setUserHasScrolledUp(!isNearBottom);
-    }
-  };
-
-  // Handle category parameter from URL or redirect to dashboard if no category
+  // Handle category parameter from URL
   useEffect(() => {
-    if (router.isReady) {
-      if (router.query.category) {
-        const category = router.query.category as string;
-        if (category === 'housing' || category === 'business') {
-          setSelectedCategory(category);
-          console.log('Category set from URL:', category);
-        }
-      } else {
-        // If no category parameter, redirect to dashboard
-        router.replace('/dashboard');
+    if (router.isReady && router.query.category) {
+      const category = router.query.category as string;
+      if (category === 'housing' || category === 'business') {
+        setSelectedCategory(category);
+        console.log('Category set from URL:', category);
       }
     }
-  }, [router.isReady, router.query.category, router]);
+  }, [router.isReady, router.query.category]);
 
-  // Smart auto-scroll: only scroll to bottom if user hasn't manually scrolled up
-  useEffect(() => {
-    if (!userHasScrolledUp) {
-      scrollToBottom();
-    }
-  }, [messages, userHasScrolledUp]);
+  // No more timer-based scrolling! The smart scroll hook handles everything automatically.
 
-  // Continuous scroll during typing animations and loading states (only if user hasn't scrolled up)
-  useEffect(() => {
-    if ((isLoading || loadingState || isTyping) && !userHasScrolledUp) {
-      // Scroll every 100ms while loading/typing to keep up with the animation
-      const interval = setInterval(() => {
-        scrollToBottom();
-      }, 100);
-      
-      return () => clearInterval(interval);
+  // Helpers for conversations storage
+  function getStoredConversations(): Array<{ id: string; title: string; updatedAt: number }> {
+    try {
+      const json = localStorage.getItem('chatConversations');
+      return json ? JSON.parse(json) : [];
+    } catch {
+      return [];
     }
-  }, [isLoading, loadingState, isTyping, userHasScrolledUp]);
+  }
 
-  // Additional scroll during typing animations (only if user hasn't scrolled up)
-  useEffect(() => {
-    // Check if the last message is from assistant and might be typing
-    if (messages.length > 0 && !userHasScrolledUp) {
-      const lastMessage = messages[messages.length - 1];
-      if (lastMessage.role === 'assistant') {
-        // Calculate scrolling duration based on text length and typing speed
-        const textLength = lastMessage.content.length;
-        const typingSpeed = 6; // characters per 100ms (from TypingText speed prop)
-        const scrollDuration = Math.max(
-          (textLength * 100) / typingSpeed, // Time needed to type the full text
-          5000 // Minimum 5 seconds
-        );
-        
-        console.log(`📝 Text length: ${textLength} chars, calculated scroll duration: ${scrollDuration}ms`);
-        
-        // Scroll continuously for the calculated duration
-        const scrollInterval = setInterval(() => {
-          scrollToBottom();
-        }, 200); // Slightly slower than loading scroll to avoid conflicts
-        
-        // Stop after calculated duration
-        const stopScroll = setTimeout(() => {
-          clearInterval(scrollInterval);
-        }, scrollDuration);
-        
-        return () => {
-          clearInterval(scrollInterval);
-          clearTimeout(stopScroll);
-        };
-      }
-    }
-  }, [messages, userHasScrolledUp]);
+  function saveStoredConversations(convs: Array<{ id: string; title: string; updatedAt: number }>) {
+    localStorage.setItem('chatConversations', JSON.stringify(convs));
+  }
 
-  // Scroll when loading state changes (only if user hasn't scrolled up)
-  useEffect(() => {
-    if (loadingState && !userHasScrolledUp) {
-      setTimeout(() => scrollToBottom(), 50);
-    }
-  }, [loadingState, userHasScrolledUp]);
+  function saveCurrentConversation(messagesToSave: Message[]) {
+    if (!currentChatId) return;
+    localStorage.setItem(`chat:${currentChatId}`, JSON.stringify(messagesToSave));
+
+    // Update list metadata
+    const title = deriveTitle(messagesToSave);
+    const updatedAt = Date.now();
+    const convs = getStoredConversations();
+    const idx = convs.findIndex(c => c.id === currentChatId);
+    if (idx >= 0) convs[idx] = { id: currentChatId, title, updatedAt };
+    else convs.unshift({ id: currentChatId, title, updatedAt });
+    saveStoredConversations(convs);
+  }
+
+  function deriveTitle(msgs: Message[]): string {
+    const firstUser = msgs.find(m => m.role === 'user');
+    return firstUser?.content?.slice(0, 60) || 'New chat';
+  }
+
+  function startNewChat() {
+    const newId = `${Date.now()}`;
+    setCurrentChatId(newId);
+    setMessages([]);
+    setSelectedAgency(null);
+    setAgencyDetection(null);
+    localStorage.setItem(`chat:${newId}`, JSON.stringify([]));
+    const convs = getStoredConversations();
+    convs.unshift({ id: newId, title: 'New chat', updatedAt: Date.now() });
+    saveStoredConversations(convs);
+    // Update URL
+    router.replace({ pathname: '/', query: { ...router.query, chatId: newId, category: router.query.category } }, undefined, { shallow: true });
+  }
 
   // Restore chat history and user preferences from localStorage on component mount
   useEffect(() => {
-    // Restore chat history
-    const savedChatHistory = localStorage.getItem("chatHistory");
-    if (savedChatHistory) {
-      try {
-        const parsedHistory = JSON.parse(savedChatHistory);
-        if (Array.isArray(parsedHistory) && parsedHistory.length > 0) {
-          setMessages(parsedHistory);
-          console.log("✅ Restored chat history from localStorage:", parsedHistory.length, "messages");
-          
-          // Show a subtle notification that chat was restored
-          console.log(`💾 Chat history restored: ${parsedHistory.length} messages`);
-          
-          // Scroll to bottom after restoring chat history
-          setTimeout(() => scrollToBottom(), 100);
-        }
-      } catch (error) {
-        console.error("❌ Error parsing saved chat history:", error);
+    // Determine chat to load from URL or start a new one
+    const queryId = (router.query.chatId as string) || null;
+    let effectiveId = queryId;
+    const convs = getStoredConversations();
+    if (!effectiveId) {
+      // Use most recent or create new
+      effectiveId = convs[0]?.id || null;
+    }
+    if (!effectiveId) {
+      // Start new chat if none exists
+      const newId = `${Date.now()}`;
+      setCurrentChatId(newId);
+      setMessages([]);
+      saveStoredConversations([{ id: newId, title: 'New chat', updatedAt: Date.now() }]);
+      localStorage.setItem(`chat:${newId}`, JSON.stringify([]));
+      router.replace({ pathname: '/', query: { ...router.query, chatId: newId, category: router.query.category } }, undefined, { shallow: true });
+    } else {
+      setCurrentChatId(effectiveId);
+      const stored = localStorage.getItem(`chat:${effectiveId}`);
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed)) setMessages(parsed);
+        } catch {}
+      }
+      // Ensure URL reflects chatId
+      if (router.query.chatId !== effectiveId) {
+        router.replace({ pathname: '/', query: { ...router.query, chatId: effectiveId } }, undefined, { shallow: true });
       }
     }
 
     // Restore user preferences
-    const savedCountry = localStorage.getItem("selectedCountry");
     const savedLanguage = localStorage.getItem("selectedLanguage");
     const savedAgency = localStorage.getItem("selectedAgency");
     const savedButton = localStorage.getItem("selectedButton");
     const savedCategory = localStorage.getItem("selectedCategory");
 
-    if (savedCountry) setSelectedCountry(savedCountry);
     if (savedLanguage) setSelectedLanguage(savedLanguage);
     if (savedAgency) setSelectedAgency(savedAgency);
     if (savedButton && (savedButton === 'smart' || savedButton === 'ragLink' || savedButton === 'ragForm')) {
@@ -203,15 +264,9 @@ export default function Home() {
 
   // Save chat history to localStorage whenever messages change
   useEffect(() => {
-    if (messages.length > 0) {
-      localStorage.setItem("chatHistory", JSON.stringify(messages));
-    }
+    saveCurrentConversation(messages);
   }, [messages]);
 
-  // Save user preferences to localStorage whenever they change
-  useEffect(() => {
-    localStorage.setItem("selectedCountry", selectedCountry);
-  }, [selectedCountry]);
 
   useEffect(() => {
     localStorage.setItem("selectedLanguage", selectedLanguage);
@@ -243,12 +298,19 @@ export default function Home() {
       timestamp: new Date()
     };
 
-    setMessages(prev => [...prev, userMessage]);
+    setMessages(prev => {
+      const newMessages = [...prev, userMessage];
+      
+      // Check if we have exactly 3 user messages and generate title
+      const userMessages = newMessages.filter(msg => msg.role === 'user');
+      if (userMessages.length === 3 && chatTitle === 'New Chat') {
+        generateChatTitle(userMessages.map(msg => msg.content));
+      }
+      
+      return newMessages;
+    });
     setInput('');
     setIsLoading(true);
-    
-    // Scroll to bottom when user sends message
-    setTimeout(() => scrollToBottom(), 100);
 
     // Set initial loading state based on response type
     if (selectedButton === 'ragLink' || selectedButton === 'ragForm') {
@@ -275,7 +337,7 @@ export default function Home() {
     const requestBody = {
       message: userMessage.content,
       conversationContext: conversationContext,
-      country: selectedCountry,
+      country: 'Vietnam',
       language: selectedLanguage,
       selectedAgency: selectedAgency, // Pass selected agency to backend
       settings: {
@@ -284,7 +346,7 @@ export default function Home() {
         category: selectedCategory
       }
     };
-    console.log('DEBUG: Sending request with country:', selectedCountry, 'language:', selectedLanguage, 'category:', selectedCategory);
+    console.log('DEBUG: Sending request with country: Vietnam, language:', selectedLanguage, 'category:', selectedCategory);
     console.log('DEBUG: Selected button type:', selectedButton);
     console.log('DEBUG: Full request body:', requestBody);
     console.log('DEBUG: Sending to endpoint:', '/api/smartChat');
@@ -338,9 +400,6 @@ export default function Home() {
             };
             setMessages(prev => [...prev, assistantMessage]);
             
-            // Scroll to bottom when assistant message is added
-            setTimeout(() => scrollToBottom(), 100);
-            
             setTimeout(() => {
               setLoadingState(null);
               // Switch back to Smart Response after showing results
@@ -377,7 +436,7 @@ export default function Home() {
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 query: userMessage.content,
-                country: selectedCountry,
+                country: 'Vietnam',
                 language: selectedLanguage,
                 category: selectedCategory
               })
@@ -407,7 +466,7 @@ export default function Home() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                   query: userMessage.content,
-                  country: selectedCountry,
+                  country: 'Vietnam',
                   language: selectedLanguage
                 })
               });
@@ -461,7 +520,7 @@ export default function Home() {
         const aiRequestBody = {
           message: userMessage.content,
           conversationContext: conversationContext,
-          country: selectedCountry,
+          country: 'Vietnam',
           language: selectedLanguage,
           selectedAgency: selectedAgency, // Pass selected agency to backend
           settings: {
@@ -471,7 +530,7 @@ export default function Home() {
             formResults: formResults
           }
         };
-            console.log('DEBUG: Sending RAG request with country:', selectedCountry, 'language:', selectedLanguage, 'category:', selectedCategory);
+            console.log('DEBUG: Sending RAG request with country: Vietnam, language:', selectedLanguage, 'category:', selectedCategory);
             console.log('DEBUG: Full RAG request body:', aiRequestBody);
         
         const aiResponse = await fetch('/api/smartChat', {
@@ -502,9 +561,6 @@ export default function Home() {
             formResults: selectedButton === 'ragForm' ? formResults : undefined
           };
           setMessages(prev => [...prev, assistantMessage]);
-          
-          // Scroll to bottom when assistant message is added
-          setTimeout(() => scrollToBottom(), 100);
         }
       } else {
         // Default response - no RAG/Form search
@@ -529,9 +585,6 @@ export default function Home() {
         }
         
         setMessages(prev => [...prev, assistantMessage]);
-        
-        // Scroll to bottom when assistant message is added
-        setTimeout(() => scrollToBottom(), 100);
       }
     } else {
       throw new Error('Failed to get response');
@@ -545,9 +598,6 @@ export default function Home() {
       timestamp: new Date()
     };
     setMessages(prev => [...prev, errorMessage]);
-    
-    // Scroll to bottom when error message is added
-    setTimeout(() => scrollToBottom(), 100);
   } finally {
     setIsLoading(false);
     setLoadingState(null);
@@ -571,9 +621,6 @@ export default function Home() {
             ? { ...msg, ragResults: data.results, formResults: undefined }
             : msg
         ));
-        
-        // Scroll to bottom when RAG results are updated
-        setTimeout(() => scrollToBottom(), 100);
       }
     } catch (error) {
       console.error('RAG search failed:', error);
@@ -595,9 +642,6 @@ export default function Home() {
             ? { ...msg, formResults: data.results, ragResults: undefined }
             : msg
         ));
-        
-        // Scroll to bottom when form results are updated
-        setTimeout(() => scrollToBottom(), 100);
       }
     } catch (error) {
       console.error('Form search failed:', error);
@@ -614,53 +658,43 @@ export default function Home() {
   };
 
   const clearChat = () => {
+    // Keep current chatId but clear messages and update storage
     setMessages([]);
-    localStorage.removeItem("chatHistory");
+    if (currentChatId) {
+      localStorage.setItem(`chat:${currentChatId}`, JSON.stringify([]));
+      const convs = getStoredConversations();
+      const idx = convs.findIndex(c => c.id === currentChatId);
+      if (idx >= 0) {
+        convs[idx].title = 'New chat';
+        convs[idx].updatedAt = Date.now();
+        saveStoredConversations(convs);
+      }
+    }
+    resetScrollState(); // Reset scroll state when clearing chat
     console.log("🗑️ Chat cleared and localStorage updated");
   };
 
   return (
-    <div className="flex h-screen bg-white">
+    <div className="flex h-screen bg-gradient-to-br from-red-50 via-white to-yellow-50">
       <Sidebar 
         settings={settings} 
         onSettingsChange={setSettings}
+        userProfile={user ? { name: profile?.full_name || user.email || 'User', email: user.email || '', avatar: undefined } : undefined}
+        onLogout={signOut}
       />
       
       <div className="flex-1 flex flex-col">
         {/* Header */}
         <div className="px-6 py-4 bg-gray-50">
           <div className="flex items-center justify-between">
-            {/* Category indicator */}
-            {selectedCategory && (
-              <div className="flex items-center gap-2 px-3 py-1 bg-blue-100 text-blue-800 rounded-lg text-sm font-medium">
-                <span className="capitalize">{selectedCategory}</span>
-                <span>Services</span>
-              </div>
-            )}
-            
-            {/* Country, Language, and Category dropdowns */}
+            {/* Left controls: Category badge + dropdowns */}
             <div className="flex items-center gap-3">
-              {/* Country dropdown */}
-              <div className="flex items-center gap-2">
-                <select
-                  value={selectedCountry}
-                  onChange={(e) => setSelectedCountry(e.target.value)}
-                  className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-900"
-                >
-                  {countries.map((country) => (
-                    <option key={country.name} value={country.name}>
-                      {country.name} {country.flag}  
-                    </option>
-                  ))}
-                </select>
-              </div>
-              
               {/* Language dropdown */}
               <div className="flex items-center gap-2">
                 <select
                   value={selectedLanguage}
                   onChange={(e) => setSelectedLanguage(e.target.value)}
-                  className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-900"
+                  className="px-3 py-2 rounded-xl border border-gray-200 bg-white text-gray-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
                 >
                   {languages.map((language) => (
                     <option key={language.name} value={language.name}>
@@ -670,93 +704,90 @@ export default function Home() {
                 </select>
               </div>
 
-              {/* Category dropdown */}
+              {/* Category dropdown - prominent style */}
               <div className="flex items-center gap-2">
                 <select
                   value={selectedCategory}
                   onChange={(e) => setSelectedCategory(e.target.value as 'housing' | 'business')}
-                  className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-900"
+                  className={`px-4 py-2 rounded-xl font-medium shadow-sm focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent border ${selectedCategory === 'housing' || selectedCategory === 'business' ? 'bg-red-50 text-red-700 border-red-300' : 'bg-white text-gray-900 border-gray-200'}`}
                 >
                   <option value="housing">Housing</option>
                   <option value="business">Business</option>
                 </select>
               </div>
             </div>
-            
-            <div className="flex items-center gap-3">
-              {/* Clear chat button */}
-              <button
-                onClick={() => {
-                  if (window.confirm("Are you sure you want to clear the chat? This action cannot be undone.")) {
-                    clearChat();
-                  }
-                }}
-                className="flex items-center gap-2 px-3 py-2 bg-red-50 hover:bg-red-100 text-red-700 rounded-lg border border-red-200"
-              >
-                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                </svg>
-                <span className="text-sm">Clear Chat</span>
-              </button>
 
-            {/* Settings dropdown */}
-            <DropdownMenu.Root>
-              <DropdownMenu.Trigger asChild>
-                <button className="w-10 h-10 flex items-center justify-center rounded-lg border border-gray-200 bg-white hover:bg-gray-50">
-                  <GearIcon className="w-5 h-5 text-gray-700" />
-                </button>
-              </DropdownMenu.Trigger>
-              <DropdownMenu.Content className="bg-white rounded-xl shadow-xl border border-gray-200 p-3 mr-2" align="end">
-                <div className="w-72 space-y-4">
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-2">Max Response Length: <span className="text-blue-600 font-semibold">{settings.maxTokens}</span></label>
-                    <input type="range" min="50" max="300" value={settings.maxTokens} onChange={(e) => setSettings({ ...settings, maxTokens: parseInt(e.target.value) })} className="w-full" />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-2">Temperature: <span className="text-blue-600 font-semibold">{settings.temperature}</span></label>
-                    <input type="range" min="0.1" max="1.0" step="0.1" value={settings.temperature} onChange={(e) => setSettings({ ...settings, temperature: parseFloat(e.target.value) })} className="w-full" />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-2">Thinking Mode</label>
-                    <select value={settings.thinkingMode} onChange={(e) => setSettings({ ...settings, thinkingMode: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                      <option value="off">Off - Direct responses</option>
-                      <option value="on">On - Show reasoning</option>
-                    </select>
-                  </div>
-                </div>
-              </DropdownMenu.Content>
-            </DropdownMenu.Root>
+            {/* Right controls */}
+            <div className="flex items-center gap-3">
+            {/* Delete Chat Button */}
+            <button 
+              onClick={() => setIsDeleteDialogOpen(true)}
+              className="w-10 h-10 flex items-center justify-center rounded-lg border border-gray-200 bg-white hover:bg-gray-50 transition-colors"
+              title="Delete chat and start new"
+            >
+              <TrashIcon className="w-5 h-5 text-gray-700" />
+            </button>
             </div>
           </div>
         </div>
 
+        {/* Delete Confirmation Modal */}
+        {isDeleteDialogOpen && (
+          <div className="fixed inset-0 z-50 grid place-items-center">
+            <div className="absolute inset-0 bg-black/40" onClick={() => setIsDeleteDialogOpen(false)} />
+            <div className="relative bg-white rounded-2xl shadow-xl border border-gray-200 w-full max-w-sm p-6 mx-4">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-10 h-10 rounded-full bg-red-100 text-red-600 flex items-center justify-center">
+                  <TrashIcon className="w-5 h-5" />
+                </div>
+                <h3 className="text-base font-semibold text-gray-900">Delete chat?</h3>
+              </div>
+              <p className="text-sm text-gray-600 mb-5">This action is permanent. Once deleted, this chat cannot be restored.</p>
+              <div className="flex items-center justify-end gap-2">
+                <button
+                  onClick={() => setIsDeleteDialogOpen(false)}
+                  className="px-4 py-2 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 text-sm"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleConfirmDeleteChat}
+                  className="px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 text-sm"
+                >
+                  Confirm
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Agency Display Card */}
         {selectedAgency && (
-          <div className="px-6 py-4 bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-blue-200">
+          <div className="px-6 py-4 bg-gradient-to-r from-red-50 to-rose-50 border-b border-red-200">
             <div className="max-w-4xl mx-auto">
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-3">
-                  <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center">
+                  <div className="w-8 h-8 bg-red-600 rounded-full flex items-center justify-center">
                     <span className="text-white text-sm font-semibold">
                       {selectedAgency.split(' ').map(word => word[0]).join('')}
                     </span>
                   </div>
                   <div>
-                    <h3 className="text-sm font-semibold text-blue-900">
+                    <h3 className="text-sm font-semibold text-red-900">
                       🏛️ Speaking on behalf of {selectedAgency}
                     </h3>
-                    <p className="text-xs text-blue-700">
+                    <p className="text-xs text-red-700">
                       All responses are now from this agency's perspective
                     </p>
-                    <p className="text-xs text-blue-600 mt-1">
-                      🌍 {selectedCountry}
+                    <p className="text-xs text-red-600 mt-1">
+                      🌍 Vietnam
                     </p>
                   </div>
                 </div>
                 <div className="flex space-x-2">
                   <button
                     onClick={() => setSelectedAgency(null)}
-                    className="text-blue-600 hover:text-blue-800 text-sm px-3 py-1 rounded-lg border border-blue-200 hover:bg-blue-50"
+                    className="text-red-600 hover:text-red-800 text-sm px-3 py-1 rounded-lg border border-red-200 hover:bg-red-50"
                   >
                     Disconnect
                   </button>
@@ -772,11 +803,8 @@ export default function Home() {
                         timestamp: new Date()
                       };
                       setMessages(prev => [...prev, disconnectionMessage]);
-                      
-                      // Scroll to bottom when disconnection message is added
-                      setTimeout(() => scrollToBottom(), 100);
                     }}
-                    className="text-blue-600 hover:text-blue-800 text-sm px-3 py-1 rounded-lg border border-blue-200 hover:bg-blue-50"
+                    className="text-red-600 hover:text-red-800 text-sm px-3 py-1 rounded-lg border border-red-200 hover:bg-red-50"
                   >
                     Switch Agency
                   </button>
@@ -804,7 +832,7 @@ export default function Home() {
                     </p>
                     {agencyDetection.category && (
                       <p className="text-xs text-green-600 mt-1">
-                        📍 {agencyDetection.category.replace("_", " ").toUpperCase()} • {selectedCountry}
+                        📍 {agencyDetection.category.replace("_", " ").toUpperCase()} • Vietnam
                       </p>
                     )}
                   </div>
@@ -823,9 +851,6 @@ export default function Home() {
                         timestamp: new Date()
                       };
                       setMessages(prev => [...prev, confirmationMessage]);
-                      
-                      // Scroll to bottom when agency confirmation is added
-                      setTimeout(() => scrollToBottom(), 100);
                     }}
                     className="bg-green-600 hover:bg-green-700 text-white text-sm px-4 py-2 rounded-lg"
                   >
@@ -845,14 +870,13 @@ export default function Home() {
 
         {/* Chat Messages */}
         <div 
-          ref={chatContainerRef}
+          data-chat-container
           className="flex-1 overflow-y-auto px-6 py-6 bg-gray-50"
-          onScroll={handleScroll}
         >
           <div className="max-w-4xl mx-auto">
             {messages.length === 0 ? (
               <div className="flex flex-col items-center justify-center min-h-[calc(100vh-300px)] text-center space-y-4">
-                <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
+                <div className="w-20 h-20 bg-gradient-to-br from-red-600 to-red-700 rounded-full flex items-center justify-center">
                   <Sparkles className="h-10 w-10 text-white" />
                 </div>
                 <h2 className="text-2xl font-semibold text-gray-900">Welcome to Govly</h2>
@@ -894,18 +918,18 @@ export default function Home() {
                       {loadingState === 'understanding' ? (
                         <div className="flex items-center gap-3 text-gray-600">
                           <div className="flex space-x-1">
-                            <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce"></div>
-                            <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                            <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                            <div className="w-2 h-2 bg-red-500 rounded-full animate-bounce"></div>
+                            <div className="w-2 h-2 bg-red-500 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                            <div className="w-2 h-2 bg-red-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
                           </div>
                           <span className="text-sm font-medium">Understanding user's question...</span>
                         </div>
                       ) : loadingState === 'finding' ? (
                         <div className="flex items-center gap-3 text-gray-600">
                           <div className="flex space-x-1">
-                            <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce"></div>
-                            <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                            <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                            <div className="w-2 h-2 bg-red-500 rounded-full animate-bounce"></div>
+                            <div className="w-2 h-2 bg-red-500 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                            <div className="w-2 h-2 bg-red-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
                           </div>
                           <span className="text-sm font-medium">
                             {selectedButton === 'ragForm' ? 'Finding relevant forms...' : 'Finding relevant files...'}
@@ -919,54 +943,54 @@ export default function Home() {
                       ) : loadingState === 'generating' ? (
                         <div className="flex items-center gap-3 text-gray-600">
                           <div className="flex space-x-1">
-                            <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce"></div>
-                            <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                            <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                            <div className="w-2 h-2 bg-red-500 rounded-full animate-bounce"></div>
+                            <div className="w-2 h-2 bg-red-500 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                            <div className="w-2 h-2 bg-red-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
                           </div>
                           <span className="text-sm font-medium">Generating response...</span>
                         </div>
                       ) : loadingState === 'chat' ? (
                         <div className="flex items-center gap-3 text-gray-600">
                           <div className="flex space-x-1">
-                            <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce"></div>
-                            <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                            <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                            <div className="w-2 h-2 bg-red-500 rounded-full animate-bounce"></div>
+                            <div className="w-2 h-2 bg-red-500 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                            <div className="w-2 h-2 bg-red-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
                           </div>
                           <span className="text-sm font-medium">Generating response for chat endpoint...</span>
                         </div>
                       ) : loadingState === 'agency' ? (
                         <div className="flex items-center gap-3 text-gray-600">
                           <div className="flex space-x-1">
-                            <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce"></div>
-                            <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                            <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                            <div className="w-2 h-2 bg-red-500 rounded-full animate-bounce"></div>
+                            <div className="w-2 h-2 bg-red-500 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                            <div className="w-2 h-2 bg-red-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
                           </div>
                           <span className="text-sm font-medium">Generating agency suggestions...</span>
                         </div>
                       ) : loadingState === 'retrieving_links' ? (
                         <div className="flex items-center gap-3 text-gray-600">
                           <div className="flex space-x-1">
-                            <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce"></div>
-                            <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                            <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                            <div className="w-2 h-2 bg-red-500 rounded-full animate-bounce"></div>
+                            <div className="w-2 h-2 bg-red-500 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                            <div className="w-2 h-2 bg-red-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
                           </div>
                           <span className="text-sm font-medium">Retrieving relevant links...</span>
                         </div>
                       ) : loadingState === 'retrieving_forms' ? (
                         <div className="flex items-center gap-3 text-gray-600">
                           <div className="flex space-x-1">
-                            <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce"></div>
-                            <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                            <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                            <div className="w-2 h-2 bg-red-500 rounded-full animate-bounce"></div>
+                            <div className="w-2 h-2 bg-red-500 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                            <div className="w-2 h-2 bg-red-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
                           </div>
                           <span className="text-sm font-medium">Retrieving relevant forms...</span>
                         </div>
                       ) : (
                         <div className="flex items-center gap-3 text-gray-600">
                           <div className="flex space-x-1">
-                            <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce"></div>
-                            <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                            <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                            <div className="w-2 h-2 bg-red-500 rounded-full animate-bounce"></div>
+                            <div className="w-2 h-2 bg-red-500 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                            <div className="w-2 h-2 bg-red-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
                           </div>
                           <span className="text-sm font-medium">Generating...</span>
                         </div>
@@ -975,7 +999,7 @@ export default function Home() {
                   </div>
                 )}
                 
-                <div ref={messagesEndRef} />
+                <div id="messages-end" />
               </>
             )}
           </div>
@@ -983,11 +1007,8 @@ export default function Home() {
           {/* Scroll to bottom button - only show when user has scrolled up */}
           {userHasScrolledUp && (
             <button
-              onClick={() => {
-                setUserHasScrolledUp(false);
-                scrollToBottom();
-              }}
-              className="fixed bottom-24 right-6 bg-blue-600 hover:bg-blue-700 text-white p-3 rounded-full shadow-lg transition-all duration-200 z-10"
+              onClick={scrollToBottom}
+              className="fixed bottom-24 right-6 bg-red-600 hover:bg-red-700 text-white p-3 rounded-full shadow-lg transition-all duration-200 z-10"
               aria-label="Scroll to bottom"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1001,62 +1022,71 @@ export default function Home() {
         <div className="bg-gray-50 p-6">
           <div className="max-w-4xl mx-auto">
             {/* Action Buttons */}
-            {messages.length > 0 && (
-              <div className="flex gap-2 mb-4">
+            <div className="flex gap-2 mb-4 justify-between">
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => {
+                      setSelectedButton('smart');
+                      // Clear all results from the most recent message
+                      if (messages.length > 0) {
+                        const lastMessage = messages[messages.length - 1];
+                        setMessages(prev => prev.map(msg => 
+                          msg.id === lastMessage.id 
+                            ? { ...msg, ragResults: undefined, formResults: undefined }
+                            : msg
+                        ));
+                      }
+                    }}
+                    className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-sm transition-all duration-200 ${
+                      selectedButton === 'smart'
+                        ? 'bg-red-600 text-white border-red-600'
+                        : 'bg-white hover:bg-gray-50 text-gray-700 border-gray-200'
+                    }`}
+                  >
+                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                    </svg>
+                    Smart Response
+                  </button>
+                  <button
+                    onClick={() => {
+                      setSelectedButton('ragLink');
+                      // Just set the mode for the next message
+                    }}
+                    className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-sm transition-all duration-200 ${
+                      selectedButton === 'ragLink'
+                        ? 'bg-red-600 text-white border-red-600'
+                        : 'bg-white hover:bg-gray-50 text-gray-700 border-gray-200'
+                    }`}
+                  >
+                    <Search className="h-4 w-4" />
+                    Find Links
+                  </button>
+                  <button
+                    onClick={() => {
+                      setSelectedButton('ragForm');
+                      // Just set the mode for the next message
+                    }}
+                    className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-sm transition-all duration-200 ${
+                      selectedButton === 'ragForm'
+                        ? 'bg-red-600 text-white border-red-600'
+                        : 'bg-white hover:bg-gray-50 text-gray-700 border-gray-200'
+                    }`}
+                  >
+                    <FileText className="h-4 w-4" />
+                    Find Forms
+                  </button>
+                </div>
+                
+                {/* Upload Form Button */}
                 <button
-                  onClick={() => {
-                    setSelectedButton('smart');
-                    // Clear all results from the most recent message
-                    if (messages.length > 0) {
-                      const lastMessage = messages[messages.length - 1];
-                      setMessages(prev => prev.map(msg => 
-                        msg.id === lastMessage.id 
-                          ? { ...msg, ragResults: undefined, formResults: undefined }
-                          : msg
-                      ));
-                    }
-                  }}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-sm transition-all duration-200 ${
-                    selectedButton === 'smart'
-                      ? 'bg-blue-600 text-white border-blue-600'
-                      : 'bg-white hover:bg-gray-50 text-gray-700 border-gray-200'
-                  }`}
+                  onClick={handleUploadClick}
+                  className="flex items-center gap-2 px-3 py-2 rounded-xl border text-sm transition-all duration-200 bg-white hover:bg-gray-50 text-gray-700 border-gray-200"
                 >
-                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                  </svg>
-                  Smart Response
-                </button>
-                <button
-                  onClick={() => {
-                    setSelectedButton('ragLink');
-                    // Just set the mode for the next message
-                  }}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-sm transition-all duration-200 ${
-                    selectedButton === 'ragLink'
-                      ? 'bg-blue-600 text-white border-blue-600'
-                      : 'bg-white hover:bg-gray-50 text-gray-700 border-gray-200'
-                  }`}
-                >
-                  <Search className="h-4 w-4" />
-                  Find Links
-                </button>
-                <button
-                  onClick={() => {
-                    setSelectedButton('ragForm');
-                    // Just set the mode for the next message
-                  }}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-sm transition-all duration-200 ${
-                    selectedButton === 'ragForm'
-                      ? 'bg-blue-600 text-white border-blue-600'
-                      : 'bg-white hover:bg-gray-50 text-gray-700 border-gray-200'
-                  }`}
-                >
-                  <FileText className="h-4 w-4" />
-                  Find Forms
+                  <Camera className="h-4 w-4" />
+                  Upload Form
                 </button>
               </div>
-            )}
 
             <div className="flex items-center gap-2 modern-input px-4 py-2">
               <input
@@ -1073,7 +1103,7 @@ export default function Home() {
               <button
                 onClick={handleSendMessage}
                 disabled={isLoading || !input.trim()}
-                className="p-2 rounded-md text-gray-600 hover:text-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-transform active:scale-95"
+                className="p-2 rounded-md text-gray-600 hover:text-red-600 disabled:opacity-50 disabled:cursor-not-allowed transition-transform active:scale-95"
                 aria-label="Send"
               >
                 <PaperPlaneIcon className="w-5 h-5" />
@@ -1082,6 +1112,16 @@ export default function Home() {
             <p className="text-xs text-gray-500 mt-3 text-center">
               Govly can make mistakes. Consider checking important information.
             </p>
+            
+            {/* Hidden file input */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*,application/pdf"
+              capture="environment"
+              onChange={handleFileChange}
+              className="hidden"
+            />
           </div>
         </div>
       </div>
