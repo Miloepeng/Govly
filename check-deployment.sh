@@ -106,3 +106,4 @@ echo "   2. Check Nginx logs: sudo tail -f /var/log/nginx/error.log"
 echo "   3. Check if ports are open in AWS Security Group"
 echo "   4. Check if services are running: pm2 status"
 
+

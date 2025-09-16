@@ -2,8 +2,32 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Document, Page, pdfjs } from 'react-pdf';
 import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Download, RotateCw, Search, Loader2 } from 'lucide-react';
 
-// Set up PDF.js worker - using unpkg for better reliability
-pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.js`;
+// Set up PDF.js worker with exact version match
+const setupPDFWorker = () => {
+  // Use the exact same version as the API
+  const apiVersion = pdfjs.version;
+  // console.log('🔍 PDF.js API version:', apiVersion);
+  
+  const workerOptions = [
+    `/pdf.worker.min.js`, // Local file (we'll update this)
+    `https://cdn.jsdelivr.net/npm/pdfjs-dist@${apiVersion}/build/pdf.worker.min.mjs`, // CDN with exact version
+    `https://unpkg.com/pdfjs-dist@${apiVersion}/build/pdf.worker.min.mjs`, // Alternative CDN with exact version
+  ];
+  
+  for (const workerSrc of workerOptions) {
+    try {
+      pdfjs.GlobalWorkerOptions.workerSrc = workerSrc;
+      // console.log('✅ PDF.js worker set to:', workerSrc);
+      // console.log('✅ Worker version should match API version:', apiVersion);
+      break;
+    } catch (error) {
+      console.warn('❌ Worker setup failed for:', workerSrc, error);
+    }
+  }
+};
+
+// Set up worker immediately
+setupPDFWorker();
 
 interface PDFViewerProps {
   url: string;
@@ -24,11 +48,17 @@ export default function PDFViewer({
   onLoadSuccess,
   onLoadError
 }: PDFViewerProps) {
+  
   const [numPages, setNumPages] = useState<number>(0);
   const [pageNumber, setPageNumber] = useState<number>(1);
   const [scale, setScale] = useState<number>(1.0);
   const [rotation, setRotation] = useState<number>(0);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+
+  // URL change effect (no debug logs)
+  useEffect(() => {
+    // no-op
+  }, [url]);
   const [error, setError] = useState<string | null>(null);
   const [extractedText, setExtractedText] = useState<string>('');
   const [pageTexts, setPageTexts] = useState<Record<number, string>>({});
@@ -75,7 +105,27 @@ export default function PDFViewer({
   }, [onTextExtracted, onLoadSuccess]);
 
   const onDocumentLoadError = useCallback((error: any) => {
-    setError(`Failed to load PDF: ${error.message}`);
+    // console.error('PDF load error for URL:', url, error);
+    let errorMessage = 'Failed to load PDF';
+    
+    if (error.message) {
+      errorMessage = error.message;
+    } else if (typeof error === 'string') {
+      errorMessage = error;
+    }
+    
+    // Handle specific PDF.js worker errors
+    if (errorMessage.includes('worker') || errorMessage.includes('Setting up fake worker') || errorMessage.includes('Worker')) {
+      errorMessage = 'PDF viewer initialization failed. This might be a network issue. Please check your internet connection and try again.';
+    } else if (errorMessage.includes('CORS') || errorMessage.includes('cors')) {
+      errorMessage = 'CORS error: The PDF server does not allow cross-origin requests.';
+    } else if (errorMessage.includes('404') || errorMessage.includes('Not Found')) {
+      errorMessage = 'PDF file not found. The document may have been moved or deleted.';
+    } else if (errorMessage.includes('403') || errorMessage.includes('Forbidden')) {
+      errorMessage = 'Access denied. You may not have permission to view this PDF.';
+    }
+    
+    setError(`Failed to load PDF: ${errorMessage}`);
     setIsLoading(false);
     if (onLoadError) {
       onLoadError(error);

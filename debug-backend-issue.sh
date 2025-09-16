@@ -88,3 +88,4 @@ echo "   3. Check if main.py has syntax errors: cd backend && python -m py_compi
 echo "   4. Check if environment variables are set correctly"
 echo "   5. Try starting backend manually: cd backend && source venv/bin/activate && python main.py"
 
+

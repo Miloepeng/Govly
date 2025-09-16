@@ -367,18 +367,69 @@ export default function DocumentViewerPage() {
 
   useEffect(() => {
     if (id) {
-      // Find document by ID
-      const foundDoc = SAMPLE_DOCUMENTS.find(doc => doc.id === id);
-      if (foundDoc) {
-        setDocument(foundDoc);
-        // Add welcome message
-        setChatMessages([{
-          id: '1',
-          role: 'assistant',
-          content: `Hi! I'm here to help you understand "${foundDoc.title}". I can explain concepts, find specific information, summarize sections, and answer questions about this document. What would you like to know?`,
-          timestamp: new Date()
-        }]);
-      }
+      const loadDocument = async () => {
+        setIsDocumentLoading(true);
+        try {
+          // First try to fetch from API
+          const response = await fetch(`/api/documents/${id}`);
+          if (response.ok) {
+            const apiDoc = await response.json();
+            console.log('📄 API Document Response:', apiDoc);
+            console.log('🔗 Public URL:', apiDoc.public_url);
+            
+            const foundDoc: Document = {
+              id: apiDoc.id,
+              title: apiDoc.title,
+              type: 'pdf' as const,
+              category: 'Government',
+              description: `Government document: ${apiDoc.title}`,
+              url: apiDoc.public_url || `/api/pdf/${apiDoc.storage_path}`,
+              dateAdded: apiDoc.created_at,
+              author: 'Government Agency',
+              tags: ['government', 'pdf'],
+              size: apiDoc.size_bytes ? `${(apiDoc.size_bytes / 1024 / 1024).toFixed(1)} MB` : 'Unknown'
+            };
+            console.log('📋 Final Document Object:', foundDoc);
+            setDocument(foundDoc);
+            // Add welcome message
+            setChatMessages([{
+              id: '1',
+              role: 'assistant',
+              content: `Hi! I'm here to help you understand "${foundDoc.title}". I can explain concepts, find specific information, summarize sections, and answer questions about this document. What would you like to know?`,
+              timestamp: new Date()
+            }]);
+          } else {
+            // Fallback to hardcoded documents
+            const foundDoc = SAMPLE_DOCUMENTS.find(doc => doc.id === id);
+            if (foundDoc) {
+              setDocument(foundDoc);
+              setChatMessages([{
+                id: '1',
+                role: 'assistant',
+                content: `Hi! I'm here to help you understand "${foundDoc.title}". I can explain concepts, find specific information, summarize sections, and answer questions about this document. What would you like to know?`,
+                timestamp: new Date()
+              }]);
+            }
+          }
+        } catch (error) {
+          console.log('Error fetching document from API, trying hardcoded:', error);
+          // Fallback to hardcoded documents
+          const foundDoc = SAMPLE_DOCUMENTS.find(doc => doc.id === id);
+          if (foundDoc) {
+            setDocument(foundDoc);
+            setChatMessages([{
+              id: '1',
+              role: 'assistant',
+              content: `Hi! I'm here to help you understand "${foundDoc.title}". I can explain concepts, find specific information, summarize sections, and answer questions about this document. What would you like to know?`,
+              timestamp: new Date()
+            }]);
+          }
+        } finally {
+          setIsDocumentLoading(false);
+        }
+      };
+      
+      loadDocument();
     }
   }, [id]);
 
@@ -758,15 +809,18 @@ export default function DocumentViewerPage() {
             {/* Document Content */}
             <div className="flex-1 overflow-hidden" ref={documentContentRef}>
               {document.type === 'pdf' ? (
-                <PDFViewer
-                  url={document.url}
-                  onTextExtracted={handleTextExtracted}
-                  highlightedSections={highlightedSections}
-                  persistentHighlights={persistentHighlights}
-                  searchQuery={searchQuery}
-                  onLoadSuccess={handleDocumentLoadSuccess}
-                  onLoadError={handleDocumentLoadError}
-                />
+                <div>
+                  
+                  <PDFViewer
+                    url={document.url}
+                    onTextExtracted={handleTextExtracted}
+                    highlightedSections={highlightedSections}
+                    persistentHighlights={persistentHighlights}
+                    searchQuery={searchQuery}
+                    onLoadSuccess={handleDocumentLoadSuccess}
+                    onLoadError={handleDocumentLoadError}
+                  />
+                </div>
               ) : (
                 <WebsiteViewer
                   url={document.url}

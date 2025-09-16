@@ -85,3 +85,4 @@ echo "   3. Check PM2 status: pm2 status"
 echo "   4. Check Nginx status: sudo systemctl status nginx"
 echo "   5. Check logs: pm2 logs"
 
+

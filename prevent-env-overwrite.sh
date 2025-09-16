@@ -48,3 +48,4 @@ echo "   4. Wait and check if they change"
 echo ""
 echo "💡 If they still change, something is running with sudo/root privileges"
 
+

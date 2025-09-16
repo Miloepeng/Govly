@@ -263,6 +263,24 @@ async def upload_file(file: UploadFile = File(...)):
 # ---------------- Models ----------------
 from typing import Optional
 
+class DocumentRequest(BaseModel):
+    title: str
+    storage_bucket: str = "documents"
+    storage_path: str
+    mime_type: str = "application/pdf"
+    size_bytes: Optional[int] = None
+
+class DocumentResponse(BaseModel):
+    id: str
+    title: str
+    storage_bucket: str
+    storage_path: str
+    public_url: Optional[str]
+    mime_type: str
+    size_bytes: Optional[int]
+    created_at: str
+    updated_at: str
+
 class ChatRequest(BaseModel):
     message: str
     conversationContext: list = []
@@ -1371,6 +1389,206 @@ async def get_form_by_filename_endpoint(filename: str):
         raise
     except Exception as e:
         print(f"💥 Exception in get_form_by_filename: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ---------------- Document Management Endpoints ----------------
+
+@app.get("/api/documents")
+async def get_documents(limit: int = 50, offset: int = 0):
+    """Get all documents with public URLs"""
+    try:
+        # Use the existing supabase client from rag.query
+        client = supabase
+        
+        # Query documents from the base table (not the view with broken URL)
+        result = client.table("documents").select("*").order("created_at", desc=True).range(offset, offset + limit - 1).execute()
+        
+        documents = []
+        for doc in result.data:
+            # Construct proper Supabase Storage public URL
+            public_url = None
+            if doc["storage_bucket"] == "documents" and doc["storage_path"]:
+                # Extract project ID from SUPABASE_URL
+                supabase_url = SUPABASE_URL
+                if supabase_url:
+                    # Convert https://your-project.supabase.co to https://your-project.supabase.co/storage/v1/object/public/
+                    public_url = f"{supabase_url}/storage/v1/object/public/{doc['storage_bucket']}/{doc['storage_path']}"
+            
+            documents.append({
+                "id": doc["id"],
+                "title": doc["title"],
+                "storage_bucket": doc["storage_bucket"],
+                "storage_path": doc["storage_path"],
+                "public_url": public_url,
+                "mime_type": doc["mime_type"],
+                "size_bytes": doc["size_bytes"],
+                "created_at": doc["created_at"],
+                "updated_at": doc["updated_at"]
+            })
+        
+        return {"documents": documents, "total": len(documents)}
+        
+    except Exception as e:
+        print(f"💥 Exception in get_documents: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/documents/{document_id}")
+async def get_document(document_id: str):
+    """Get a specific document by ID"""
+    try:
+        # Use the existing supabase client from rag.query
+        client = supabase
+        
+        # Try to parse as UUID first, then as integer
+        try:
+            import uuid
+            uuid.UUID(document_id)
+            # It's a valid UUID, use as-is
+            result = client.table("documents").select("*").eq("id", document_id).execute()
+        except ValueError:
+            # Not a UUID, try as integer
+            result = client.table("documents").select("*").eq("id", int(document_id)).execute()
+        
+        if not result.data:
+            raise HTTPException(status_code=404, detail="Document not found")
+        
+        doc = result.data[0]
+        
+        # Construct proper Supabase Storage public URL
+        public_url = None
+        if doc["storage_bucket"] == "documents" and doc["storage_path"]:
+            supabase_url = SUPABASE_URL
+            if supabase_url:
+                public_url = f"{supabase_url}/storage/v1/object/public/{doc['storage_bucket']}/{doc['storage_path']}"
+        
+        return {
+            "id": doc["id"],
+            "title": doc["title"],
+            "storage_bucket": doc["storage_bucket"],
+            "storage_path": doc["storage_path"],
+            "public_url": public_url,
+            "mime_type": doc["mime_type"],
+            "size_bytes": doc["size_bytes"],
+            "created_at": doc["created_at"],
+            "updated_at": doc["updated_at"]
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"💥 Exception in get_document: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/documents")
+async def create_document(request: DocumentRequest, current_user: Optional[Dict[str, Any]] = Depends(get_current_user)):
+    """Create a new document record"""
+    try:
+        # Use the existing supabase client from rag.query
+        client = supabase
+        
+        # Insert document metadata
+        result = client.table("documents").insert({
+            "title": request.title,
+            "storage_bucket": request.storage_bucket,
+            "storage_path": request.storage_path,
+            "mime_type": request.mime_type,
+            "size_bytes": request.size_bytes,
+            "uploaded_by": current_user.get("user_id") if current_user else None
+        }).execute()
+        
+        if not result.data:
+            raise HTTPException(status_code=500, detail="Failed to create document")
+        
+        doc = result.data[0]
+        return {
+            "id": doc["id"],
+            "title": doc["title"],
+            "storage_bucket": doc["storage_bucket"],
+            "storage_path": doc["storage_path"],
+            "mime_type": doc["mime_type"],
+            "size_bytes": doc["size_bytes"],
+            "created_at": doc["created_at"],
+            "updated_at": doc["updated_at"]
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"💥 Exception in create_document: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/api/documents/{document_id}")
+async def delete_document(document_id: str, current_user: Optional[Dict[str, Any]] = Depends(get_current_user)):
+    """Delete a document and its storage file"""
+    try:
+        # Use the existing supabase client from rag.query
+        client = supabase
+        
+        # Get document info first - handle both UUID and integer IDs
+        try:
+            import uuid
+            uuid.UUID(document_id)
+            # It's a valid UUID, use as-is
+            doc_result = client.table("documents").select("*").eq("id", document_id).execute()
+        except ValueError:
+            # Not a UUID, try as integer
+            doc_result = client.table("documents").select("*").eq("id", int(document_id)).execute()
+        
+        if not doc_result.data:
+            raise HTTPException(status_code=404, detail="Document not found")
+        
+        doc = doc_result.data[0]
+        
+        # Delete from storage
+        storage = client.storage.from_(doc["storage_bucket"])
+        storage.remove([doc["storage_path"]])
+        
+        # Delete from database
+        client.table("documents").delete().eq("id", document_id).execute()
+        
+        return {"message": "Document deleted successfully"}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"💥 Exception in delete_document: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/documents/search")
+async def search_documents(query: str, limit: int = 10):
+    """Search documents by title"""
+    try:
+        # Use the existing supabase client from rag.query
+        client = supabase
+        
+        # Search documents by title (case-insensitive)
+        result = client.table("documents").select("*").ilike("title", f"%{query}%").order("created_at", desc=True).limit(limit).execute()
+        
+        documents = []
+        for doc in result.data:
+            # Construct proper Supabase Storage public URL
+            public_url = None
+            if doc["storage_bucket"] == "documents" and doc["storage_path"]:
+                supabase_url = SUPABASE_URL
+                if supabase_url:
+                    public_url = f"{supabase_url}/storage/v1/object/public/{doc['storage_bucket']}/{doc['storage_path']}"
+            
+            documents.append({
+                "id": doc["id"],
+                "title": doc["title"],
+                "storage_bucket": doc["storage_bucket"],
+                "storage_path": doc["storage_path"],
+                "public_url": public_url,
+                "mime_type": doc["mime_type"],
+                "size_bytes": doc["size_bytes"],
+                "created_at": doc["created_at"],
+                "updated_at": doc["updated_at"]
+            })
+        
+        return {"documents": documents, "query": query, "total": len(documents)}
+        
+    except Exception as e:
+        print(f"💥 Exception in search_documents: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":

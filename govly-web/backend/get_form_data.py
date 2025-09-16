@@ -91,7 +91,7 @@ def get_all_form_categories() -> List[Dict[str, Any]]:
         return []
     
     try:
-        result = supabase.rpc('get_forms_categories').execute()
+        result = supabase.rpc('get_forms_categories', {}).execute()
         return result.data or []
         
     except Exception as e:

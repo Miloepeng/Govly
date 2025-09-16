@@ -14,6 +14,9 @@ interface Document {
   author?: string;
   tags: string[];
   size?: string; // For PDFs
+  public_url?: string; // From Supabase
+  mime_type?: string;
+  size_bytes?: number;
 }
 
 // Hardcoded documents using real PDFs and government websites
@@ -97,38 +100,72 @@ export default function DocumentsPage() {
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [documents, setDocuments] = useState<Document[]>(SAMPLE_DOCUMENTS);
   const [isLoading, setIsLoading] = useState(false);
+  const [searchResults, setSearchResults] = useState<Document[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
 
-  // Try to load documents from API
+  // Load documents from API
   useEffect(() => {
     const loadDocuments = async () => {
       setIsLoading(true);
       try {
-        // Try to get forms from the API
-        const formsResponse = await fetch('/api/formsSummary');
-        if (formsResponse.ok) {
-          const formsData = await formsResponse.json();
+        // Load documents from the new document management API
+        const documentsResponse = await fetch('/api/documents');
+        if (documentsResponse.ok) {
+          const documentsData = await documentsResponse.json();
 
-          // Convert forms to document format
-          const apiDocuments: Document[] = formsData.forms?.map((form: any) => ({
-            id: `form_${form.id}`,
-            title: form.title || form.filename || 'Untitled Form',
+          // Convert API documents to the expected format
+          const apiDocuments: Document[] = documentsData.documents?.map((doc: any) => ({
+            id: doc.id,
+            title: doc.title,
             type: 'pdf' as const,
-            category: form.category || 'Government',
-            description: form.description || 'Government form document',
-            url: `/api/forms/${form.filename}`,
-            dateAdded: form.created_at || '2024-01-01',
+            category: 'Government', // Default category for uploaded PDFs
+            description: `Government document: ${doc.title}`,
+            url: doc.public_url || `/api/pdf/${doc.storage_path}`,
+            dateAdded: doc.created_at,
             author: 'Government Agency',
-            tags: form.category ? [form.category.toLowerCase()] : ['government'],
-            size: '1.0 MB'
+            tags: ['government', 'pdf'],
+            size: doc.size_bytes ? `${(doc.size_bytes / 1024 / 1024).toFixed(1)} MB` : 'Unknown',
+            public_url: doc.public_url,
+            mime_type: doc.mime_type,
+            size_bytes: doc.size_bytes
           })) || [];
 
-          // Combine with sample documents
-          if (apiDocuments.length > 0) {
+          // Also try to get forms from the forms API for backward compatibility
+          try {
+            const formsResponse = await fetch('/api/formsSummary');
+            if (formsResponse.ok) {
+              const formsData = await formsResponse.json();
+              const formDocuments: Document[] = formsData.forms?.map((form: any) => ({
+                id: `form_${form.id}`,
+                title: form.title || form.filename || 'Untitled Form',
+                type: 'pdf' as const,
+                category: form.category || 'Government',
+                description: form.description || 'Government form document',
+                url: `/api/forms/${form.filename}`,
+                dateAdded: form.created_at || '2024-01-01',
+                author: 'Government Agency',
+                tags: form.category ? [form.category.toLowerCase()] : ['government'],
+                size: '1.0 MB'
+              })) || [];
+
+              // Combine all documents
+              setDocuments([...SAMPLE_DOCUMENTS, ...apiDocuments, ...formDocuments]);
+            } else {
+              // If forms API fails, just use documents + samples
+              setDocuments([...SAMPLE_DOCUMENTS, ...apiDocuments]);
+            }
+          } catch (formsError) {
+            console.log('Forms API failed, using documents + samples:', formsError);
             setDocuments([...SAMPLE_DOCUMENTS, ...apiDocuments]);
           }
+        } else {
+          // Fallback to sample documents if API fails
+          console.log('Documents API failed, using samples');
+          setDocuments(SAMPLE_DOCUMENTS);
         }
       } catch (error) {
         console.log('Could not load documents from API, using samples:', error);
+        setDocuments(SAMPLE_DOCUMENTS);
       } finally {
         setIsLoading(false);
       }
@@ -137,16 +174,69 @@ export default function DocumentsPage() {
     loadDocuments();
   }, []);
 
+  // Search documents using API
+  useEffect(() => {
+    const searchDocuments = async () => {
+      if (!searchQuery.trim()) {
+        setSearchResults([]);
+        return;
+      }
+
+      setIsSearching(true);
+      try {
+        const searchResponse = await fetch(`/api/documents/search?query=${encodeURIComponent(searchQuery)}&limit=20`);
+        if (searchResponse.ok) {
+          const searchData = await searchResponse.json();
+          const apiSearchResults: Document[] = searchData.documents?.map((doc: any) => ({
+            id: doc.id,
+            title: doc.title,
+            type: 'pdf' as const,
+            category: 'Government',
+            description: `Government document: ${doc.title}`,
+            url: doc.public_url || `/api/pdf/${doc.storage_path}`,
+            dateAdded: doc.created_at,
+            author: 'Government Agency',
+            tags: ['government', 'pdf'],
+            size: doc.size_bytes ? `${(doc.size_bytes / 1024 / 1024).toFixed(1)} MB` : 'Unknown',
+            public_url: doc.public_url,
+            mime_type: doc.mime_type,
+            size_bytes: doc.size_bytes
+          })) || [];
+          setSearchResults(apiSearchResults);
+        }
+      } catch (error) {
+        console.log('Search API failed:', error);
+        setSearchResults([]);
+      } finally {
+        setIsSearching(false);
+      }
+    };
+
+    const timeoutId = setTimeout(searchDocuments, 300); // Debounce search
+    return () => clearTimeout(timeoutId);
+  }, [searchQuery]);
+
   // Filter documents based on search and category
-  const filteredDocuments = documents.filter(doc => {
-    const matchesSearch = doc.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         doc.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         doc.tags.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()));
+  const filteredDocuments = (() => {
+    if (searchQuery.trim()) {
+      // Use search results when searching
+      return searchResults.filter((doc: Document) => {
+        const matchesCategory = selectedCategory === 'All' || doc.category === selectedCategory;
+        return matchesCategory;
+      });
+    } else {
+      // Use local filtering when not searching
+      return documents.filter((doc: Document) => {
+        const matchesSearch = doc.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                             doc.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                             doc.tags.some((tag: string) => tag.toLowerCase().includes(searchQuery.toLowerCase()));
 
-    const matchesCategory = selectedCategory === 'All' || doc.category === selectedCategory;
+        const matchesCategory = selectedCategory === 'All' || doc.category === selectedCategory;
 
-    return matchesSearch && matchesCategory;
-  });
+        return matchesSearch && matchesCategory;
+      });
+    }
+  })();
 
   const handleDocumentClick = (doc: Document) => {
     router.push(`/documents/${doc.id}`);
@@ -181,7 +271,7 @@ export default function DocumentsPage() {
                 type="text"
                 placeholder="Search documents, descriptions, or tags..."
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchQuery(e.target.value)}
                 className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
               />
             </div>
@@ -191,7 +281,7 @@ export default function DocumentsPage() {
               <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
               <select
                 value={selectedCategory}
-                onChange={(e) => setSelectedCategory(e.target.value)}
+                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setSelectedCategory(e.target.value)}
                 className="pl-10 pr-8 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent bg-white min-w-[200px]"
               >
                 {CATEGORIES.map(category => (
@@ -206,16 +296,22 @@ export default function DocumentsPage() {
           {/* Results Count */}
           <div className="mt-4 pt-4 border-t border-gray-200">
             <p className="text-sm text-gray-600">
-              Showing {filteredDocuments.length} of {documents.length} documents
-              {selectedCategory !== 'All' && ` in ${selectedCategory}`}
-              {searchQuery && ` matching "${searchQuery}"`}
+              {isSearching ? (
+                'Searching...'
+              ) : (
+                <>
+                  Showing {filteredDocuments.length} of {searchQuery.trim() ? 'search results' : documents.length} documents
+                  {selectedCategory !== 'All' && ` in ${selectedCategory}`}
+                  {searchQuery && ` matching "${searchQuery}"`}
+                </>
+              )}
             </p>
           </div>
         </div>
 
         {/* Document Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredDocuments.map((doc) => (
+          {filteredDocuments.map((doc: Document) => (
             <div
               key={doc.id}
               onClick={() => handleDocumentClick(doc)}
@@ -262,7 +358,7 @@ export default function DocumentsPage() {
 
               {/* Tags */}
               <div className="flex flex-wrap gap-2 mb-4">
-                {doc.tags.slice(0, 3).map((tag) => (
+                {doc.tags.slice(0, 3).map((tag: string) => (
                   <span
                     key={tag}
                     className="px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded-md"

@@ -112,3 +112,4 @@ echo "   3. Try starting frontend manually: cd frontend && npm start"
 echo "   4. Check if there are any errors in the build process"
 echo "   5. Check if Next.js is configured correctly"
 
+
