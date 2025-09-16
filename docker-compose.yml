@@ -3,8 +3,6 @@ services:
     build:
       context: ./govly-web/backend
       dockerfile: Dockerfile
-    ports:
-      - "8000:8000"
     environment:
       - PORT=8000
       - SEA_LION_API_KEY=${SEA_LION_API_KEY}
