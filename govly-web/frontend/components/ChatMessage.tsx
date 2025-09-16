@@ -2,8 +2,7 @@ import { useState, useEffect } from 'react';
 import { Message } from '../types/chat';
 import ReactMarkdown from 'react-markdown';
 import DynamicForm from './DynamicForm';
-import { getSupabase } from '../lib/supabase';
-const supabase = getSupabase();
+import { supabase } from '../lib/supabase';
 
 interface ChatMessageProps {
   message: Message & { formSchema?: any };
