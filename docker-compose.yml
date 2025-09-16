@@ -48,10 +48,10 @@ services:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      test: ["CMD", "node", "-e", "http=require('http');http.get('http://localhost:3000',r=>process.exit(r.statusCode<400?0:1)).on('error',()=>process.exit(1))"]
       interval: 30s
       timeout: 10s
-      retries: 3
+      retries: 10
 
 networks:
   default:
