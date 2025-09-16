@@ -34,7 +34,7 @@ EOF
 # Frontend environment
 cat > frontend/.env.local << EOF
 # Production Frontend Environment
-NEXT_PUBLIC_API_URL=http://localhost:8000
+NEXT_PUBLIC_API_URL=/api
 NEXT_PUBLIC_SUPABASE_URL=${SUPABASE_URL}
 NEXT_PUBLIC_SUPABASE_ANON_KEY=${SUPABASE_KEY}
 NODE_ENV=production

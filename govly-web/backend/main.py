@@ -91,7 +91,16 @@ if os.path.exists(forms_dir):
 # CORS middleware for frontend communication
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # Your Next.js frontend
+    allow_origins=[
+        "http://localhost:3000",  # Local development
+        "http://localhost:80",    # Local Nginx
+        "http://127.0.0.1:3000",  # Local development alternative
+        "http://127.0.0.1:80",    # Local Nginx alternative
+        # Add your EC2 public IP and domain here
+        # "http://YOUR_EC2_PUBLIC_IP",
+        # "https://YOUR_DOMAIN.com",
+        "*"  # Allow all origins for now (remove in production)
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

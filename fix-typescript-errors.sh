@@ -22,6 +22,14 @@ echo "   ✅ Added 'id: number' property to FormResult interface"
 echo "   ✅ Fixed hardcoded localhost URL to use environment variable"
 echo ""
 
+echo "🧹 Cleaning TypeScript cache and node_modules..."
+rm -rf .next
+rm -rf node_modules/.cache
+rm -rf node_modules/.next
+
+echo "🔄 Reinstalling dependencies..."
+npm install
+
 echo "🏗️ Building frontend..."
 npm run build
 
