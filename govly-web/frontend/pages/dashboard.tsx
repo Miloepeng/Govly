@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/router';
 import { Home, Building2, Heart, GraduationCap, Car, Users } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import DashboardHeader from '../components/DashboardHeader';
+import { ApplicationService, type ApplicationRecord } from '../lib/applicationService';
 
 interface CategoryCardProps {
   title: string;
@@ -52,7 +53,66 @@ function CategoryCard({ title, description, icon, isAvailable, category, onClick
 
 export default function Dashboard() {
   const router = useRouter();
-  const { loading } = useAuth();
+  const { loading, user } = useAuth();
+  const [applications, setApplications] = useState<ApplicationRecord[]>([]);
+  const [appsLoading, setAppsLoading] = useState<boolean>(true);
+
+  useEffect(() => {
+    async function loadApplications() {
+      if (!user) {
+        setApplications([]);
+        setAppsLoading(false);
+        return;
+      }
+      // Migrate any legacy localStorage format, then load
+      await ApplicationService.migrateLocalStorageApplications(user.id);
+      const { data } = await ApplicationService.getUserApplications(user.id);
+      // Sort by last update desc (prefer progress dates, fallback to dateApplied)
+      const sorted = [...data].sort((a, b) => {
+        const aDates = [
+          a.progress?.applied?.date,
+          a.progress?.reviewed?.date,
+          a.progress?.confirmed?.date,
+          (a as any).lastSaved,
+          a.dateApplied,
+        ].filter(Boolean) as string[];
+        const bDates = [
+          b.progress?.applied?.date,
+          b.progress?.reviewed?.date,
+          b.progress?.confirmed?.date,
+          (b as any).lastSaved,
+          b.dateApplied,
+        ].filter(Boolean) as string[];
+        const aMax = aDates.length ? Math.max(...aDates.map(d => new Date(d).getTime())) : 0;
+        const bMax = bDates.length ? Math.max(...bDates.map(d => new Date(d).getTime())) : 0;
+        return bMax - aMax;
+      });
+      setApplications(sorted);
+      setAppsLoading(false);
+    }
+    loadApplications();
+  }, [user]);
+
+  const stats = useMemo(() => {
+    const total = applications.length;
+    const pending = applications.filter(a => a.status === 'applied').length;
+    const lastUpdateTs = applications.length
+      ? Math.max(
+          ...applications.map(a => {
+            const dates = [
+              a.progress?.applied?.date,
+              a.progress?.reviewed?.date,
+              a.progress?.confirmed?.date,
+              (a as any).lastSaved,
+              a.dateApplied,
+            ].filter(Boolean) as string[];
+            return dates.length ? Math.max(...dates.map(d => new Date(d).getTime())) : 0;
+          })
+        )
+      : 0;
+    const lastUpdate = lastUpdateTs ? new Date(lastUpdateTs) : null;
+    return { total, pending, lastUpdate };
+  }, [applications]);
 
   // Show loading skeleton while auth state is loading
   if (loading) {
@@ -120,7 +180,43 @@ export default function Dashboard() {
   ];
 
   const handleCategoryClick = (category: string) => {
-    router.push(`/?category=${category}`);
+    // Get existing chats
+    const savedChats = JSON.parse(localStorage.getItem('chatConversations') || '[]');
+    
+    // Check for an empty chat at the top of the list
+    const latestChat = savedChats[0];
+    const latestChatMessages = latestChat ? JSON.parse(localStorage.getItem(`chat:${latestChat.id}`) || '[]') : [];
+    
+    let chatId;
+    
+    if (latestChat && latestChatMessages.length === 0) {
+      // Reuse the empty chat
+      chatId = latestChat.id;
+      
+      // Update its timestamp to keep it at top
+      const updatedChats = [
+        { ...latestChat, updatedAt: Date.now() },
+        ...savedChats.slice(1)
+      ];
+      localStorage.setItem('chatConversations', JSON.stringify(updatedChats));
+    } else {
+      // Create new chat
+      chatId = `${Date.now()}`;
+      
+      // Save empty chat
+      localStorage.setItem(`chat:${chatId}`, JSON.stringify([]));
+      
+      // Add to conversations list
+      const newChats = [{ 
+        id: chatId, 
+        title: 'New Chat', 
+        updatedAt: Date.now() 
+      }, ...savedChats];
+      localStorage.setItem('chatConversations', JSON.stringify(newChats));
+    }
+    
+    // Navigate to chat with ID and category
+    router.push(`/?chatId=${chatId}&category=${category}`);
   };
 
   return (
@@ -177,43 +273,60 @@ export default function Dashboard() {
                 <span className="px-2 py-1 text-xs rounded-full bg-green-100 text-green-700">Live</span>
               </div>
 
-              {/* Recent Applications - hardcoded */}
+              {/* Recent Applications - dynamic */}
               <div className="space-y-3">
-                <div className="flex items-center justify-between p-3 rounded-lg border border-gray-100 bg-gray-50">
-                  <div>
-                    <div className="text-sm font-medium text-gray-900">Business Registration</div>
-                    <div className="text-xs text-gray-500">Submitted • Sep 10, 2025</div>
+                {appsLoading ? (
+                  <div className="space-y-2">
+                    {[...Array(3)].map((_, i) => (
+                      <div key={i} className="h-12 bg-gray-100 rounded-lg animate-pulse" />
+                    ))}
                   </div>
-                  <span className="px-2 py-1 text-xs rounded-full bg-yellow-100 text-yellow-700">Pending</span>
-                </div>
-                <div className="flex items-center justify-between p-3 rounded-lg border border-gray-100 bg-gray-50">
-                  <div>
-                    <div className="text-sm font-medium text-gray-900">Housing Permit</div>
-                    <div className="text-xs text-gray-500">Updated • Sep 8, 2025</div>
-                  </div>
-                  <span className="px-2 py-1 text-xs rounded-full bg-blue-100 text-blue-700">In Review</span>
-                </div>
-                <div className="flex items-center justify-between p-3 rounded-lg border border-gray-100 bg-gray-50">
-                  <div>
-                    <div className="text-sm font-medium text-gray-900">Tax Certificate</div>
-                    <div className="text-xs text-gray-500">Approved • Sep 1, 2025</div>
-                  </div>
-                  <span className="px-2 py-1 text-xs rounded-full bg-green-100 text-green-700">Approved</span>
-                </div>
+                ) : applications.length === 0 ? (
+                  <div className="text-sm text-gray-500">No applications yet. Submit a form to see it here.</div>
+                ) : (
+                  applications.slice(0, 3).map((app) => {
+                    const latestDateStr = (() => {
+                      const dates = [
+                        app.progress?.applied?.date,
+                        app.progress?.reviewed?.date,
+                        app.progress?.confirmed?.date,
+                        (app as any).lastSaved,
+                        app.dateApplied,
+                      ].filter(Boolean) as string[];
+                      const ts = dates.length ? Math.max(...dates.map(d => new Date(d).getTime())) : 0;
+                      return ts ? new Date(ts).toLocaleDateString() : '';
+                    })();
+                    const statusBadge = app.status === 'applied'
+                      ? { label: 'Pending', cls: 'bg-yellow-100 text-yellow-700' }
+                      : app.status === 'reviewed'
+                      ? { label: 'In Review', cls: 'bg-blue-100 text-blue-700' }
+                      : { label: 'Approved', cls: 'bg-green-100 text-green-700' };
+                    const subLabel = app.status === 'applied' ? 'Submitted' : app.status === 'reviewed' ? 'Updated' : 'Approved';
+                    return (
+                      <div key={app.id} className="flex items-center justify-between p-3 rounded-lg border border-gray-100 bg-gray-50">
+                        <div>
+                          <div className="text-sm font-medium text-gray-900">{app.formTitle}</div>
+                          <div className="text-xs text-gray-500">{subLabel} • {latestDateStr}</div>
+                        </div>
+                        <span className={`px-2 py-1 text-xs rounded-full ${statusBadge.cls}`}>{statusBadge.label}</span>
+                      </div>
+                    );
+                  })
+                )}
               </div>
 
               {/* Stats */}
               <div className="mt-5 grid grid-cols-3 gap-3">
                 <div className="p-3 rounded-lg border border-gray-100 bg-white text-center">
-                  <div className="text-lg font-semibold text-gray-900">12</div>
+                  <div className="text-lg font-semibold text-gray-900">{stats.total}</div>
                   <div className="text-xs text-gray-500">Total</div>
                 </div>
                 <div className="p-3 rounded-lg border border-gray-100 bg-white text-center">
-                  <div className="text-lg font-semibold text-gray-900">3</div>
+                  <div className="text-lg font-semibold text-gray-900">{stats.pending}</div>
                   <div className="text-xs text-gray-500">Pending</div>
                 </div>
                 <div className="p-3 rounded-lg border border-gray-100 bg-white text-center">
-                  <div className="text-lg font-semibold text-gray-900">Sep 10</div>
+                  <div className="text-lg font-semibold text-gray-900">{stats.lastUpdate ? stats.lastUpdate.toLocaleDateString() : '-'}</div>
                   <div className="text-xs text-gray-500">Last Update</div>
                 </div>
               </div>

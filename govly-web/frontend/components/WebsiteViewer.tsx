@@ -8,6 +8,7 @@ interface WebsiteViewerProps {
   persistentHighlights?: string[];
   onLoadSuccess?: () => void;
   onLoadError?: (error: any) => void;
+  scrollToSection?: string;
 }
 
 export default function WebsiteViewer({
@@ -16,7 +17,8 @@ export default function WebsiteViewer({
   highlightedSections = [],
   persistentHighlights = [],
   onLoadSuccess,
-  onLoadError
+  onLoadError,
+  scrollToSection
 }: WebsiteViewerProps) {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [hasError, setHasError] = useState<boolean>(false);
@@ -24,6 +26,8 @@ export default function WebsiteViewer({
   const [canEmbed, setCanEmbed] = useState<boolean>(true);
   const [extractedContent, setExtractedContent] = useState<string>('');
   const [lastRefresh, setLastRefresh] = useState<number>(Date.now());
+  const [scrollIndicatorVisible, setScrollIndicatorVisible] = useState<boolean>(false);
+  const [currentScrollSection, setCurrentScrollSection] = useState<string>('');
 
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
@@ -127,7 +131,8 @@ export default function WebsiteViewer({
       'twitter.com',
       'instagram.com',
       'linkedin.com',
-      'github.com'
+      'github.com',
+      'dichvucong.moit.gov.vn' // Add government site that blocks embedding
     ];
 
     return !blockingDomains.some(blocked => domain.includes(blocked));
@@ -136,6 +141,20 @@ export default function WebsiteViewer({
   useEffect(() => {
     setCanEmbed(isEmbeddable(validatedUrl));
   }, [validatedUrl]);
+
+  // Handle scroll to section requests
+  useEffect(() => {
+    if (scrollToSection && scrollToSection.trim()) {
+      console.log('🌐 Website section referenced:', scrollToSection);
+      setCurrentScrollSection(scrollToSection);
+      setScrollIndicatorVisible(true);
+
+      // Show indicator for 5 seconds
+      setTimeout(() => {
+        setScrollIndicatorVisible(false);
+      }, 5000);
+    }
+  }, [scrollToSection]);
 
   // Mock text extraction for demonstration
   useEffect(() => {
@@ -218,7 +237,7 @@ Please ask specific questions and the AI will provide relevant information based
       </div>
 
       {/* Website Content */}
-      <div className="flex-1 relative bg-white">
+      <div className="flex-1 relative bg-white overflow-hidden" style={{ height: 'calc(100vh - 120px)' }}>
         {isLoading && (
           <div className="absolute inset-0 flex items-center justify-center bg-gray-50 z-10">
             <div className="flex items-center space-x-3">
@@ -228,6 +247,21 @@ Please ask specific questions and the AI will provide relevant information based
                 <p className="text-sm text-gray-500 mt-1">
                   Connecting to {domain}
                 </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Scroll Indicator */}
+        {scrollIndicatorVisible && currentScrollSection && (
+          <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-20">
+            <div className="bg-blue-600 text-white px-4 py-2 rounded-lg shadow-lg flex items-center space-x-2 animate-pulse">
+              <div className="w-2 h-2 bg-white rounded-full animate-bounce"></div>
+              <span className="text-sm font-medium">
+                Looking for: "{currentScrollSection}"
+              </span>
+              <div className="text-xs opacity-75">
+                (Manual search may be needed)
               </div>
             </div>
           </div>
@@ -243,8 +277,8 @@ Please ask specific questions and the AI will provide relevant information based
                 Embedding Restricted
               </h3>
               <p className="text-gray-600 mb-4">
-                This website cannot be displayed in an embedded frame due to security policies.
-                You can still visit the site directly.
+                This government website has security policies that prevent it from being displayed in an embedded frame.
+                You can visit the site directly in a new tab, and I can still help you understand its content and procedures.
               </p>
               <div className="space-y-3">
                 <button
@@ -268,10 +302,10 @@ Please ask specific questions and the AI will provide relevant information based
             ref={iframeRef}
             key={lastRefresh} // Force reload when refreshed
             src={validatedUrl}
-            className="w-full h-full border-none"
+            className="w-full h-full border-none absolute inset-0"
             onLoad={handleIframeLoad}
             onError={handleIframeError}
-            sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
+            sandbox="allow-same-origin allow-scripts allow-popups allow-forms allow-modals allow-downloads allow-presentation"
             title={`Website: ${domain}`}
           />
         )}

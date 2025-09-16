@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Message } from '../types/chat';
 import ReactMarkdown from 'react-markdown';
 import DynamicForm from './DynamicForm';
-import { supabase } from '../lib/supabase';
+import { useRouter } from 'next/router';
 
 interface ChatMessageProps {
   message: Message & { formSchema?: any };
@@ -68,7 +68,22 @@ function TypingText({
 
   return (
     <div className="text-gray-900 leading-relaxed prose prose-sm max-w-none">
-      <ReactMarkdown>{displayedText}</ReactMarkdown>
+      <ReactMarkdown
+        components={{
+          // Custom styling for better formatting
+          strong: ({ children }) => <strong className="font-semibold text-gray-900">{children}</strong>,
+          em: ({ children }) => <em className="italic text-gray-800">{children}</em>,
+          ul: ({ children }) => <ul className="list-disc ml-4 space-y-1">{children}</ul>,
+          ol: ({ children }) => <ol className="list-decimal ml-4 space-y-1">{children}</ol>,
+          li: ({ children }) => <li className="text-gray-900">{children}</li>,
+          p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+          h1: ({ children }) => <h1 className="text-lg font-bold mb-2">{children}</h1>,
+          h2: ({ children }) => <h2 className="text-base font-semibold mb-2">{children}</h2>,
+          h3: ({ children }) => <h3 className="text-sm font-medium mb-1">{children}</h3>,
+        }}
+      >
+        {displayedText}
+      </ReactMarkdown>
     </div>
   );
 }
@@ -84,6 +99,7 @@ export default function ChatMessage({
   onTypingComplete,
 }: ChatMessageProps) {
   const isUser = message.role === 'user';
+  const router = useRouter();
   const [showRAGResults, setShowRAGResults] = useState(false);
   const [showFormResults, setShowFormResults] = useState(false);
   
@@ -159,49 +175,47 @@ export default function ChatMessage({
               <div className="mt-6 space-y-4">
                 {/* Best Match Document */}
                 {message.ragResults[0] && (
-                  <div className="p-5 bg-blue-50 border-2 border-blue-200 rounded-xl shadow-sm">
-                    <h4 className="text-sm font-semibold text-blue-800 mb-3 flex items-center gap-2">
-                      ⭐️ Best Matching Policy
-                    </h4>
-                    <div className="bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow">
-                      <div
-                        key="best-match"
-                        className="p-5 cursor-pointer"
+                  <div className="p-4 bg-white border border-gray-200 rounded-lg shadow-sm">
+                    <div className="flex items-start justify-between mb-4">
+                      <h5 className="text-lg font-semibold text-gray-900 line-clamp-2 flex-1 pr-4">
+                        {message.ragResults[0].title}
+                      </h5>
+                      <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full font-medium">
+                        Document
+                      </span>
+                    </div>
+
+                    <p className="text-sm text-gray-600 mb-4 line-clamp-3">
+                      {message.ragResults[0].content}
+                    </p>
+
+                    <div className="flex gap-2">
+                      <button
                         onClick={() => {
                           const bestMatch = message.ragResults?.[0];
                           if (!bestMatch) return;
                           window.open(bestMatch.url, '_blank');
                         }}
+                        className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-3 rounded-md transition-colors flex items-center justify-center gap-2 text-sm"
                       >
-                        <div className="flex items-start justify-between mb-3">
-                          <h5 className="text-lg font-semibold text-gray-900 line-clamp-2 flex-1">
-                            📄 {message.ragResults[0].title}
-                          </h5>
-                          <span className="text-xs bg-blue-100 text-blue-800 px-3 py-1.5 rounded-full font-medium">
-                            Recommended
-                          </span>
-                        </div>
-                        <p className="text-sm text-gray-600 mb-4 line-clamp-3">
-                          {message.ragResults[0].content}
-                        </p>
-                        <div className="flex items-center justify-between text-sm">
-                          <span className="text-blue-600 font-medium flex items-center gap-1">
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                            </svg>
-                            Click to read policy
-                          </span>
-                          <a
-                            href={message.ragResults[0].url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-blue-600 hover:text-blue-800 flex items-center gap-1"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            📖 Read Full
-                          </a>
-                        </div>
-                      </div>
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                        </svg>
+                        Open Document
+                      </button>
+                      <button
+                        onClick={() => {
+                          const bestMatch = message.ragResults?.[0];
+                          if (!bestMatch) return;
+                          navigator.clipboard.writeText(bestMatch.url);
+                        }}
+                        className="px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-md transition-colors flex items-center justify-center"
+                        title="Copy link"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                        </svg>
+                      </button>
                     </div>
                   </div>
                 )}
@@ -233,21 +247,29 @@ export default function ChatMessage({
               <div className="mt-6 space-y-4">
                 {/* Best Match Form */}
                 {message.formResults[0] && (
-                  <div className="p-5 bg-green-50 border-2 border-green-200 rounded-xl shadow-sm">
-                    <h4 className="text-sm font-semibold text-green-800 mb-3 flex items-center gap-2">
-                      ⭐️ Best Matching Form
-                    </h4>
-                    <div className="bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow">
-                      <div
-                        key="best-match"
-                        className="p-5 cursor-pointer"
+                  <div className="p-4 bg-white border border-gray-200 rounded-lg shadow-sm">
+                    <div className="flex items-start justify-between mb-4">
+                      <h5 className="text-lg font-semibold text-gray-900 line-clamp-2 flex-1 pr-4">
+                        {message.formResults[0].title}
+                      </h5>
+                      <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full font-medium">
+                        Form
+                      </span>
+                    </div>
+
+                    <p className="text-sm text-gray-600 mb-4 line-clamp-3">
+                      {message.formResults[0].description}
+                    </p>
+
+                    <div className="flex gap-2">
+                      <button
                         onClick={async () => {
                           const bestMatch = message.formResults?.[0];
                           if (!bestMatch) return;
-                          
+
                           setSelectedForm(bestMatch);
                           setIsLoadingForm(true);
-                          
+
                           try {
                             const response = await fetch(`/api/extractFormById`, {
                               method: 'POST',
@@ -267,34 +289,26 @@ export default function ChatMessage({
                             setIsLoadingForm(false);
                           }
                         }}
+                        className="flex-1 bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-3 rounded-md transition-colors flex items-center justify-center gap-2 text-sm"
                       >
-                        <div className="flex items-start justify-between mb-3">
-                          <h5 className="text-lg font-semibold text-gray-900 line-clamp-2 flex-1">
-                            📋 {message.formResults[0].title}
-                          </h5>
-                          <span className="text-xs bg-green-100 text-green-800 px-3 py-1.5 rounded-full font-medium">
-                            Recommended
-                          </span>
-                        </div>
-                        <p className="text-sm text-gray-600 mb-4">{message.formResults[0].description}</p>
-                        <div className="flex items-center justify-between text-sm">
-                          <span className="text-green-600 font-medium flex items-center gap-1">
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                            </svg>
-                            Click to fill form
-                          </span>
-                          <a
-                            href={message.formResults[0].url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-blue-600 hover:text-blue-800 flex items-center gap-1"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            📄 View PDF
-                          </a>
-                        </div>
-                      </div>
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                        </svg>
+                        Fill Form
+                      </button>
+                      <button
+                        onClick={() => {
+                          const bestMatch = message.formResults?.[0];
+                          if (!bestMatch) return;
+                          window.open(bestMatch.url, '_blank');
+                        }}
+                        className="px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-md transition-colors flex items-center justify-center gap-2 text-sm"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                        </svg>
+                        View PDF
+                      </button>
                     </div>
                   </div>
                 )}
