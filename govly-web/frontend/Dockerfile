@@ -8,7 +8,7 @@ WORKDIR /app
 
 # Copy package files
 COPY package.json package-lock.json* ./
-RUN npm ci && node scripts/copy-pdf-worker.js
+RUN npm ci
 
 # Rebuild the source code only when needed
 FROM base AS builder
@@ -28,6 +28,10 @@ ARG NEXT_PUBLIC_SUPABASE_ANON_KEY
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL
 ENV NEXT_PUBLIC_SUPABASE_ANON_KEY=$NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+# Copy PDF worker script and run it
+COPY scripts/ ./scripts/
+RUN node scripts/copy-pdf-worker.js
 
 # Build the application (ensures worker exists in public)
 RUN npm run build
