@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/router';
 import { Home, Building2, Heart, GraduationCap, Car, Users } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
 import DashboardHeader from '../components/DashboardHeader';
 
 interface CategoryCardProps {
@@ -51,6 +52,27 @@ function CategoryCard({ title, description, icon, isAvailable, category, onClick
 
 export default function Dashboard() {
   const router = useRouter();
+  const { loading } = useAuth();
+
+  // Show loading skeleton while auth state is loading
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-red-50 via-white to-yellow-50">
+        <DashboardHeader />
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+          <div className="animate-pulse space-y-4">
+            <div className="h-8 bg-gray-200 rounded w-1/4 mx-auto"></div>
+            <div className="h-4 bg-gray-200 rounded w-1/2 mx-auto"></div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-8">
+              {[...Array(6)].map((_, i) => (
+                <div key={i} className="h-32 bg-gray-200 rounded-xl"></div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const categories = [
     {
