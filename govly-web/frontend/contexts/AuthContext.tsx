@@ -24,48 +24,57 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let isMounted = true
 
+    // Try to get session from localStorage first
+    const localToken = localStorage.getItem('sb-access-token');
+    if (localToken) {
+      setSession({ access_token: localToken } as Session);
+      setLoading(false); // Show content immediately if we have a token
+    }
+
+    // Then verify/refresh the session in the background
     ;(async () => {
       try {
-        console.log('AuthContext: Initial mount, fetching session...');
         const supabase = getSupabase()
         const { data: { session } } = await supabase.auth.getSession()
-        console.log('AuthContext: Got session:', session);
         
         if (!isMounted) return
-        setSession(session)
-        setUser(session?.user ?? null)
         
         if (session?.user) {
-          console.log('AuthContext: User found in session:', session.user);
-          console.log('AuthContext: User metadata:', session.user.user_metadata);
-          await fetchUserProfile(session.user.id)
+          setSession(session)
+          setUser(session.user)
+          // Fetch profile in parallel
+          fetchUserProfile(session.user.id).catch(console.error)
         } else {
-          console.log('AuthContext: No user in session');
+          setSession(null)
+          setUser(null)
+          setProfile(null)
           setLoading(false)
         }
-      } catch (err: unknown) {
-        console.error('Error getting initial session:', err instanceof Error ? err.message : String(err))
+      } catch (err) {
+        console.error('Session error:', err)
         if (isMounted) setLoading(false)
       }
     })()
 
-    const supabase2 = getSupabase()
-    const { data: { subscription } } = supabase2.auth.onAuthStateChange(async (event: AuthChangeEvent, session: Session | null) => {
+    const supabase = getSupabase()
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (!isMounted) return
+      
       setSession(session)
       setUser(session?.user ?? null)
+      
       if (session?.user) {
-        await fetchUserProfile(session.user.id)
+        fetchUserProfile(session.user.id).catch(console.error)
       } else {
         setProfile(null)
         setLoading(false)
       }
     })
 
-    // Safety timeout to avoid indefinite loading
+    // Shorter safety timeout since we show content earlier
     const safety = setTimeout(() => {
       if (isMounted) setLoading(false)
-    }, 10000)
+    }, 3000)
 
     return () => {
       isMounted = false
