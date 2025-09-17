@@ -16,10 +16,17 @@ const nextConfig = {
     ignoreDuringBuilds: true,
   },
   async rewrites() {
+    // Use environment variable or fallback to Docker service name
+    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || 'http://backend:8000'
+    
     return [
       {
         source: '/api/:path*',
-        destination: 'http://backend:8000/api/:path*',  // Docker service name
+        destination: `${backendUrl}/api/:path*`,
+      },
+      {
+        source: '/health',
+        destination: `${backendUrl}/health`,
       },
     ]
   },
