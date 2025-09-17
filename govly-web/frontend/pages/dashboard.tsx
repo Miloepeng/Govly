@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { Home, Building2, Heart, GraduationCap, Car, Users } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import DashboardHeader from '../components/DashboardHeader';
+import { ApplicationService } from '../lib/applicationService';
 
 interface CategoryCardProps {
   title: string;
@@ -50,9 +51,71 @@ function CategoryCard({ title, description, icon, isAvailable, category, onClick
   );
 }
 
+interface ApplicationData {
+  id: string;
+  formTitle: string;
+  dateApplied: string;
+  status: 'applied' | 'reviewed' | 'confirmed' | 'draft';
+  lastSaved?: string;
+}
+
 export default function Dashboard() {
   const router = useRouter();
-  const { loading } = useAuth();
+  const { user, loading } = useAuth();
+  const [applications, setApplications] = useState<ApplicationData[]>([]);
+  const [applicationsLoading, setApplicationsLoading] = useState(true);
+
+  // Fetch applications data
+  useEffect(() => {
+    const loadApplications = async () => {
+      if (!user) {
+        setApplicationsLoading(false);
+        return;
+      }
+
+      try {
+        const { data, error } = await ApplicationService.getUserApplications(user.id);
+        if (error) {
+          console.error('Error loading applications:', error);
+          setApplications([]);
+        } else {
+          setApplications(data || []);
+        }
+      } catch (error) {
+        console.error('Error loading applications:', error);
+        setApplications([]);
+      } finally {
+        setApplicationsLoading(false);
+      }
+    };
+
+    loadApplications();
+  }, [user]);
+
+  // Calculate application stats
+  const getApplicationStats = () => {
+    const total = applications.length;
+    const pending = applications.filter(app => app.status === 'applied').length;
+    const lastUpdated = applications.length > 0 
+      ? new Date(Math.max(...applications.map(app => new Date(app.lastSaved || app.dateApplied).getTime())))
+      : null;
+    
+    return {
+      total,
+      pending,
+      lastUpdated: lastUpdated ? lastUpdated.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'N/A'
+    };
+  };
+
+  // Get recent applications (last 3)
+  const getRecentApplications = () => {
+    return applications
+      .sort((a, b) => new Date(b.lastSaved || b.dateApplied).getTime() - new Date(a.lastSaved || a.dateApplied).getTime())
+      .slice(0, 3);
+  };
+
+  const stats = getApplicationStats();
+  const recentApplications = getRecentApplications();
 
   // Show loading skeleton while auth state is loading
   if (loading) {
@@ -177,43 +240,96 @@ export default function Dashboard() {
                 <span className="px-2 py-1 text-xs rounded-full bg-green-100 text-green-700">Live</span>
               </div>
 
-              {/* Recent Applications - hardcoded */}
+              {/* Recent Applications - dynamic */}
               <div className="space-y-3">
-                <div className="flex items-center justify-between p-3 rounded-lg border border-gray-100 bg-gray-50">
-                  <div>
-                    <div className="text-sm font-medium text-gray-900">Business Registration</div>
-                    <div className="text-xs text-gray-500">Submitted • Sep 10, 2025</div>
+                {applicationsLoading ? (
+                  // Loading skeleton
+                  [...Array(3)].map((_, i) => (
+                    <div key={i} className="flex items-center justify-between p-3 rounded-lg border border-gray-100 bg-gray-50 animate-pulse">
+                      <div className="flex-1">
+                        <div className="h-4 bg-gray-200 rounded w-3/4 mb-1"></div>
+                        <div className="h-3 bg-gray-200 rounded w-1/2"></div>
+                      </div>
+                      <div className="h-6 bg-gray-200 rounded-full w-16"></div>
+                    </div>
+                  ))
+                ) : recentApplications.length > 0 ? (
+                  recentApplications.map((app) => {
+                    const getStatusColor = (status: string) => {
+                      switch (status) {
+                        case 'draft': return 'bg-gray-100 text-gray-700';
+                        case 'applied': return 'bg-yellow-100 text-yellow-700';
+                        case 'reviewed': return 'bg-blue-100 text-blue-700';
+                        case 'confirmed': return 'bg-green-100 text-green-700';
+                        default: return 'bg-gray-100 text-gray-700';
+                      }
+                    };
+                    
+                    const getStatusText = (status: string) => {
+                      switch (status) {
+                        case 'draft': return 'Draft';
+                        case 'applied': return 'Pending';
+                        case 'reviewed': return 'In Review';
+                        case 'confirmed': return 'Approved';
+                        default: return status;
+                      }
+                    };
+
+                    const lastUpdate = new Date(app.lastSaved || app.dateApplied);
+                    const isToday = lastUpdate.toDateString() === new Date().toDateString();
+                    const dateText = isToday 
+                      ? 'Today' 
+                      : lastUpdate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+                    return (
+                      <div key={app.id} className="flex items-center justify-between p-3 rounded-lg border border-gray-100 bg-gray-50">
+                        <div>
+                          <div className="text-sm font-medium text-gray-900">{app.formTitle}</div>
+                          <div className="text-xs text-gray-500">Updated • {dateText}</div>
+                        </div>
+                        <span className={`px-2 py-1 text-xs rounded-full ${getStatusColor(app.status)}`}>
+                          {getStatusText(app.status)}
+                        </span>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div className="text-center py-4 text-gray-500 text-sm">
+                    No applications yet. Start by chatting with Govly AI!
                   </div>
-                  <span className="px-2 py-1 text-xs rounded-full bg-yellow-100 text-yellow-700">Pending</span>
-                </div>
-                <div className="flex items-center justify-between p-3 rounded-lg border border-gray-100 bg-gray-50">
-                  <div>
-                    <div className="text-sm font-medium text-gray-900">Housing Permit</div>
-                    <div className="text-xs text-gray-500">Updated • Sep 8, 2025</div>
-                  </div>
-                  <span className="px-2 py-1 text-xs rounded-full bg-blue-100 text-blue-700">In Review</span>
-                </div>
-                <div className="flex items-center justify-between p-3 rounded-lg border border-gray-100 bg-gray-50">
-                  <div>
-                    <div className="text-sm font-medium text-gray-900">Tax Certificate</div>
-                    <div className="text-xs text-gray-500">Approved • Sep 1, 2025</div>
-                  </div>
-                  <span className="px-2 py-1 text-xs rounded-full bg-green-100 text-green-700">Approved</span>
-                </div>
+                )}
               </div>
 
               {/* Stats */}
               <div className="mt-5 grid grid-cols-3 gap-3">
                 <div className="p-3 rounded-lg border border-gray-100 bg-white text-center">
-                  <div className="text-lg font-semibold text-gray-900">12</div>
+                  <div className="text-lg font-semibold text-gray-900">
+                    {applicationsLoading ? (
+                      <div className="h-5 bg-gray-200 rounded animate-pulse"></div>
+                    ) : (
+                      stats.total
+                    )}
+                  </div>
                   <div className="text-xs text-gray-500">Total</div>
                 </div>
                 <div className="p-3 rounded-lg border border-gray-100 bg-white text-center">
-                  <div className="text-lg font-semibold text-gray-900">3</div>
+                  <div className="text-lg font-semibold text-gray-900">
+                    {applicationsLoading ? (
+                      <div className="h-5 bg-gray-200 rounded animate-pulse"></div>
+                    ) : (
+                      stats.pending
+                    )}
+                  </div>
                   <div className="text-xs text-gray-500">Pending</div>
                 </div>
                 <div className="p-3 rounded-lg border border-gray-100 bg-white text-center">
-                  <div className="text-lg font-semibold text-gray-900">Sep 10</div>
+                  <div className="text-lg font-semibold text-gray-900">
+                    {applicationsLoading ? (
+                      <div className="h-5 bg-gray-200 rounded animate-pulse"></div>
+                    ) : (
+                      stats.lastUpdated
+                    )}
+                  </div>
                   <div className="text-xs text-gray-500">Last Update</div>
                 </div>
               </div>
@@ -269,7 +385,6 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
-
     </div>
   );
 }

@@ -3,6 +3,7 @@ import { ChevronLeft, ChevronRight, Search, ArrowLeft, ArrowRight } from "lucide
 import { useAuth } from '../contexts/AuthContext';
 import { ApplicationService } from '../lib/applicationService';
 import { FormAutofillService } from '../lib/formAutofillService';
+import { v4 as uuidv4 } from 'uuid';
 
 interface Field {
   name: string;
@@ -99,10 +100,6 @@ export default function DynamicForm({
     return <p className="text-gray-500">No form fields available.</p>;
   }
 
-  const currentField = schema.fields[currentFieldIndex];
-  const totalFields = schema.fields.length;
-  const progress = ((currentFieldIndex + 1) / totalFields) * 100;
-
   // Calculate completion percentage
   const calculateCompletionPercentage = useCallback((data: Record<string, any>) => {
     const totalFields = schema.fields.length;
@@ -111,6 +108,11 @@ export default function DynamicForm({
     ).length;
     return Math.round((filledFields / totalFields) * 100);
   }, [schema.fields.length]);
+
+  const currentField = schema.fields[currentFieldIndex];
+  const totalFields = schema.fields.length;
+  const completionPercentage = calculateCompletionPercentage(formData);
+  const progress = completionPercentage;
 
   // Auto-save function
   const autoSave = useCallback(async (data: Record<string, any>) => {
@@ -181,10 +183,10 @@ export default function DynamicForm({
         clearTimeout(saveTimeoutRef.current);
       }
 
-      // Always create a new application with 'applied' status for now
-      // This ensures it works regardless of database schema
+      // Create a new application with 'applied' status
+      // Use proper UUID format for database compatibility
       const application = {
-        id: Date.now().toString(),
+        id: uuidv4(),
         formTitle: schema.fields[0]?.label || "Government Form",
         dateApplied: new Date().toISOString(),
         status: "applied" as const,
@@ -362,15 +364,23 @@ export default function DynamicForm({
         console.log("🔍 Detailed field analysis:");
         
         if (data.fields && Array.isArray(data.fields)) {
+          console.log(`📊 AI Response Analysis: ${data.fields.length} fields received`);
           data.fields.forEach((f: any, index: number) => {
             console.log(`  Field ${index + 1}: ${f.name} = "${f.value}"`);
           });
+        } else {
+          console.error('❌ Invalid AI response format:', data);
         }
 
         if (data.fields && Array.isArray(data.fields)) {
           const filled: Record<string, any> = {};
-          let fieldsFilled = 0;
+          let fieldsFilledByAI = 0;
           let fieldsToAsk = 0;
+          
+          // Count currently filled fields before AI fill
+          const currentFilledCount = Object.values(formData).filter(value => 
+            value !== null && value !== undefined && value !== ''
+          ).length;
           
           data.fields.forEach((f: any) => {
             if (f.value === "ASK_USER" || f.value === null || f.value === undefined) {
@@ -382,21 +392,44 @@ export default function DynamicForm({
               }
             } else {
               filled[f.name] = f.value;
-              fieldsFilled++;
+              // Only count as "filled by AI" if it wasn't already filled
+              if (!formData[f.name] || formData[f.name].toString().trim() === '') {
+                fieldsFilledByAI++;
+              }
             }
           });
           
           setFormData(filled);
           
-          // Show success message
-          if (fieldsFilled > 0) {
-            alert(`✅ AI successfully filled ${fieldsFilled} fields! ${fieldsToAsk > 0 ? `${fieldsToAsk} fields need your input.` : ''}`);
-          } else if (fieldsToAsk > 0) {
-            alert(`ℹ️ AI couldn't determine values for ${fieldsToAsk} fields. Please fill them manually.`);
+          // Count total filled fields after AI fill
+          const totalFilledCount = Object.values(filled).filter(value => 
+            value !== null && value !== undefined && value !== ''
+          ).length;
+          
+          // Show success message with detailed counts
+          console.log('🔍 AI Fill Debug:', {
+            fieldsFilledByAI,
+            fieldsToAsk,
+            totalFilledCount,
+            totalFields: schema.fields.length,
+            currentFilledCount
+          });
+          
+          // Calculate remaining fields that need input
+          const remainingFields = schema.fields.length - totalFilledCount;
+          
+          if (fieldsFilledByAI > 0 && remainingFields > 0) {
+            alert(`✅ AI successfully filled ${fieldsFilledByAI} fields! ${remainingFields} fields still need your input. ${totalFilledCount} of ${schema.fields.length} fields are now complete.`);
+          } else if (fieldsFilledByAI > 0) {
+            alert(`✅ AI successfully filled ${fieldsFilledByAI} fields! All ${totalFilledCount} of ${schema.fields.length} fields are now complete.`);
+          } else if (remainingFields > 0) {
+            alert(`ℹ️ AI couldn't determine values for ${fieldsToAsk} fields. ${remainingFields} fields still need your input. ${totalFilledCount} of ${schema.fields.length} fields are currently complete.`);
+          } else {
+            alert(`✅ All fields are already filled! ${totalFilledCount} of ${schema.fields.length} fields complete.`);
           }
           
           // Update the form data display to show which fields were filled by AI
-          console.log(`🤖 AI autofill summary: ${fieldsFilled} fields filled, ${fieldsToAsk} fields need input`);
+          console.log(`🤖 AI autofill summary: ${fieldsFilledByAI} fields filled by AI, ${remainingFields} fields still need input`);
         } else {
           console.error("Invalid response format from AI autofill");
           alert("❌ AI autofill failed: Invalid response format");
@@ -465,7 +498,7 @@ export default function DynamicForm({
       {/* Progress Bar */}
       <div className="mb-6">
         <div className="flex items-center justify-between text-sm text-gray-600 mb-2">
-          <span>Field {currentFieldIndex + 1} of {totalFields}</span>
+          <span>{Math.round(completionPercentage / 100 * totalFields)} of {totalFields} fields filled</span>
           <span>{Math.round(progress)}% Complete</span>
         </div>
         <div className="w-full bg-gray-200 rounded-full h-2">
@@ -659,13 +692,19 @@ export default function DynamicForm({
 
       {/* Submit Button */}
       <div className="text-center">
-        <button
-          type="submit"
-          onClick={handleSubmit}
-          className="px-8 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-lg font-medium"
-        >
-          Submit Form
-        </button>
+        {(() => {
+          const completionPercentage = calculateCompletionPercentage(formData);
+          
+          return (
+            <button
+              type="submit"
+              onClick={handleSubmit}
+              className="px-8 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-lg font-medium"
+            >
+              Submit Form ({completionPercentage}% Complete)
+            </button>
+          );
+        })()}
       </div>
     </div>
   );

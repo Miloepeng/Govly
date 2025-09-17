@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { CheckCircle, Clock, AlertCircle, Calendar, FileText, ArrowRight, ArrowLeft, X, Eye, Download } from 'lucide-react';
+import { CheckCircle, Clock, AlertCircle, Calendar, FileText, ArrowRight, ArrowLeft, X, Eye, Download, Trash2 } from 'lucide-react';
 import { useRouter } from 'next/router';
 import { useAuth } from '../contexts/AuthContext';
 import { ApplicationService } from '../lib/applicationService';
@@ -39,23 +39,26 @@ export default function StatusPage() {
       }
 
       try {
-        // First, try to migrate any localStorage applications
+        // First, try to migrate any localStorage applications (one-time migration)
         await ApplicationService.migrateLocalStorageApplications(user.id);
         
-        // Then load applications from Supabase
+        // Clean up any existing duplicates
+        await ApplicationService.cleanupDuplicates(user.id);
+        
+        // Load applications from Supabase only
         const { data, error } = await ApplicationService.getUserApplications(user.id);
         
         if (error) {
-          // Fallback to localStorage if Supabase fails
-          const localApplications = JSON.parse(localStorage.getItem('applications') || '[]');
-          setApplications(localApplications);
+          console.error('Error loading applications:', error);
+          alert('Failed to load applications. Please refresh the page.');
+          setApplications([]);
         } else {
           setApplications(data || []);
         }
       } catch (error) {
-        // Fallback to localStorage
-        const localApplications = JSON.parse(localStorage.getItem('applications') || '[]');
-        setApplications(localApplications);
+        console.error('Error loading applications:', error);
+        alert('Failed to load applications. Please refresh the page.');
+        setApplications([]);
       } finally {
         setIsLoading(false);
       }
@@ -97,30 +100,57 @@ export default function StatusPage() {
     return app.status === filterStatus;
   });
 
-  const updateApplicationStatus = (appId: string, newStatus: string) => {
-    const updatedApplications = applications.map(app => {
-      if (app.id === appId) {
-        const progress = { ...app.progress };
-        
-        // Update progress based on new status
-        if (newStatus === 'reviewed') {
-          progress.reviewed = { date: new Date().toISOString(), completed: true };
-        } else if (newStatus === 'confirmed') {
-          progress.reviewed = { date: new Date().toISOString(), completed: true };
-          progress.confirmed = { date: new Date().toISOString(), completed: true };
-        }
-        
-        return {
-          ...app,
-          status: newStatus,
-          progress
-        };
-      }
-      return app;
-    });
+  const updateApplicationStatus = async (appId: string, newStatus: string) => {
+    if (!user) return;
     
-    setApplications(updatedApplications);
-    localStorage.setItem('applications', JSON.stringify(updatedApplications));
+    try {
+      // Find the current application
+      const currentApp = applications.find(app => app.id === appId);
+      if (!currentApp) return;
+      
+      // Update progress based on new status
+      const progress = { ...currentApp.progress };
+      if (newStatus === 'reviewed') {
+        progress.reviewed = { date: new Date().toISOString(), completed: true };
+      } else if (newStatus === 'confirmed') {
+        progress.reviewed = { date: new Date().toISOString(), completed: true };
+        progress.confirmed = { date: new Date().toISOString(), completed: true };
+      }
+      
+      // Update in database first
+      const { error } = await ApplicationService.updateApplicationStatus(
+        appId, 
+        newStatus as 'applied' | 'reviewed' | 'confirmed',
+        progress
+      );
+      
+      if (error) {
+        console.error('Error updating application status:', error);
+        alert('Failed to update application status. Please try again.');
+        return;
+      }
+      
+      // Only update local state after successful database update
+      const updatedApplications = applications.map(app => {
+        if (app.id === appId) {
+          return {
+            ...app,
+            status: newStatus,
+            progress
+          };
+        }
+        return app;
+      });
+      
+      setApplications(updatedApplications);
+      
+      // Remove localStorage sync - database is the source of truth
+      // localStorage.setItem('applications', JSON.stringify(updatedApplications));
+      
+    } catch (error) {
+      console.error('Error updating application status:', error);
+      alert('Failed to update application status. Please try again.');
+    }
   };
 
   const handleViewDetails = async (application: Application) => {
@@ -146,19 +176,36 @@ export default function StatusPage() {
     URL.revokeObjectURL(url);
   };
 
-  const handleContinueInChat = (application: Application) => {
-    // Store the application data in localStorage for the chat to pick up
-    localStorage.setItem('continueApplication', JSON.stringify({
-      id: application.id,
-      formTitle: application.formTitle,
-      formData: application.formData,
-      schema: application.schema,
-      status: application.status,
-      progress: application.progress
-    }));
+  const handleDeleteApplication = async (application: Application) => {
+    if (!user) return;
     
-    // Navigate to the main chat page
-    router.push('/');
+    const confirmed = window.confirm(
+      `Are you sure you want to delete "${application.formTitle}"? This action cannot be undone.`
+    );
+    
+    if (!confirmed) return;
+    
+    try {
+      // Delete from Supabase
+      const { error } = await ApplicationService.deleteApplication(application.id);
+      
+      if (error) {
+        console.error('Error deleting application:', error);
+        alert('Failed to delete application. Please try again.');
+        return;
+      }
+      
+      // Remove from local state
+      const updatedApplications = applications.filter(app => app.id !== application.id);
+      setApplications(updatedApplications);
+      
+      // Database is the source of truth - no localStorage sync needed
+      
+      alert('Application deleted successfully.');
+    } catch (error) {
+      console.error('Error deleting application:', error);
+      alert('Failed to delete application. Please try again.');
+    }
   };
 
   if (loading || isLoading) {
@@ -396,18 +443,18 @@ export default function StatusPage() {
                       </button>
                     )}
                     <button
-                      onClick={() => handleContinueInChat(app)}
-                      className="flex-1 px-3 py-2 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700 transition-colors flex items-center justify-center gap-2"
-                    >
-                      <ArrowRight className="w-4 h-4" />
-                      Continue in Chat
-                    </button>
-                    <button
                       onClick={() => handleViewDetails(app)}
                       className="flex-1 px-3 py-2 bg-gray-100 text-gray-700 text-sm rounded-lg hover:bg-gray-200 transition-colors flex items-center justify-center gap-2"
                     >
                       <Eye className="w-4 h-4" />
                       View Details
+                    </button>
+                    <button
+                      onClick={() => handleDeleteApplication(app)}
+                      className="px-3 py-2 bg-red-100 text-red-700 text-sm rounded-lg hover:bg-red-200 transition-colors flex items-center justify-center gap-2"
+                      title="Delete Application"
+                    >
+                      <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
                 </div>

@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/router';
-import { Bot, Sparkles, Search, FileText, Check, Camera } from 'lucide-react';
+import { Bot, Sparkles, Search, FileText, Check } from 'lucide-react';
 import { TrashIcon, PaperPlaneIcon } from '@radix-ui/react-icons';
 import ChatMessage from '../components/ChatMessage';
 import Sidebar from '../components/Sidebar';
@@ -39,19 +39,7 @@ export default function Home() {
   const [agencyDetection, setAgencyDetection] = useState<any>(null);
   const [isTyping, setIsTyping] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleUploadClick = () => {
-    fileInputRef.current?.click();
-  };
-
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      console.log('File selected:', file.name);
-      // TODO: Add file upload logic here
-    }
-  };
 
 
   const handleConfirmDeleteChat = () => {
@@ -1127,14 +1115,6 @@ export default function Home() {
                   </button>
                 </div>
                 
-                {/* Upload Form Button */}
-                <button
-                  onClick={handleUploadClick}
-                  className="flex items-center gap-2 px-3 py-2 rounded-xl border text-sm transition-all duration-200 bg-white hover:bg-gray-50 text-gray-700 border-gray-200"
-                >
-                  <Camera className="h-4 w-4" />
-                  Upload Form
-                </button>
               </div>
 
 
@@ -1163,15 +1143,6 @@ export default function Home() {
               Govly can make mistakes. Consider checking important information.
             </p>
             
-            {/* Hidden file input */}
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*,application/pdf"
-              capture="environment"
-              onChange={handleFileChange}
-              className="hidden"
-            />
           </div>
         </div>
       </div>
