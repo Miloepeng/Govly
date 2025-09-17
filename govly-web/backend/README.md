@@ -49,3 +49,5 @@ The frontend document manager (`/documents`) now automatically:
 - Public URLs are computed via `public.documents_with_url` view
 - The upload script sanitizes filenames for storage compatibility
 
+
+

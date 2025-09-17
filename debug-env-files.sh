@@ -87,3 +87,5 @@ echo "   4. Check again: cat backend/.env"
 echo "   5. If they changed, something is overwriting them"
 
 
+
+

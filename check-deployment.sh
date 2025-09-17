@@ -107,3 +107,5 @@ echo "   3. Check if ports are open in AWS Security Group"
 echo "   4. Check if services are running: pm2 status"
 
 
+
+

@@ -103,3 +103,5 @@ echo "   4. Check service logs: pm2 logs"
 echo "   5. Check Nginx logs: sudo tail -f /var/log/nginx/error.log"
 
 
+
+

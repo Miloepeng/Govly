@@ -89,3 +89,5 @@ echo "   4. Check if environment variables are set correctly"
 echo "   5. Try starting backend manually: cd backend && source venv/bin/activate && python main.py"
 
 
+
+

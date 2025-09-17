@@ -147,3 +147,5 @@ echo "   5. Check if Next.js is configured correctly"
 echo "   6. Check if there are any dependency issues"
 
 
+
+

@@ -222,3 +222,5 @@ curl http://$(curl -s http://checkip.amazonaws.com/)
 - **API Docs**: `http://your-ec2-public-ip/docs`
 
 
+
+

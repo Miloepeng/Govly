@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react'
 import { User, Session, AuthChangeEvent } from '@supabase/supabase-js'
-import { supabase, UserProfile, clearSupabaseClient, getSupabase } from '@/lib/supabase'
+import { supabase, UserProfile } from '@/lib/supabase'
 
 interface AuthContextType {
   user: User | null
@@ -34,7 +34,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Then verify/refresh the session in the background
     ;(async () => {
       try {
-        const supabase = getSupabase()
         const { data: { session } } = await supabase.auth.getSession()
         
         if (!isMounted) return
@@ -56,7 +55,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     })()
 
-    const supabase = getSupabase()
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (!isMounted) return
       
@@ -86,7 +84,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const fetchUserProfile = async (userId: string) => {
     try {
       console.log('Fetching profile for user:', userId);
-      const supabase = getSupabase()
+      const supabaseClient = supabase
       
       // Log the query we're about to make
       console.log('Querying user_profiles table with id:', userId);
@@ -118,7 +116,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (error.code === 'PGRST116') { // No rows returned
           console.log('No profile found, creating new one');
           try {
-            const currentUser = await supabase.auth.getUser()
+            const currentUser = await supabaseClient.auth.getUser()
             console.log('Current user data:', currentUser.data.user);
             
             const newProfileData = {
@@ -173,7 +171,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signUp = async (email: string, password: string, fullName: string) => {
     try {
-      const supabase = getSupabase()
+      const supabaseClient = supabase
       const { error } = await supabase.auth.signUp({
         email,
         password,
@@ -201,12 +199,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signIn = async (email: string, password: string) => {
     try {
       console.log('Initializing Supabase client...');
-      // Clear any existing client to ensure fresh connection
-      clearSupabaseClient();
-      const supabase = getSupabase();
+      const supabaseClient = supabase;
 
       console.log('Attempting sign in...');
-      const { data, error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabaseClient.auth.signInWithPassword({
         email,
         password,
       });
@@ -255,8 +251,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return { error: null, session: data.session };
     } catch (err: unknown) {
       console.error('Unexpected error during sign in:', err instanceof Error ? err.message : String(err));
-      // Clear client on error
-      clearSupabaseClient();
+      // No-op: using singleton client
       return { 
         error: { 
           message: err instanceof Error ? err.message : 'An unexpected error occurred during sign in.' 
@@ -282,7 +277,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     window.location.replace('/login');
     
     // Call Supabase signOut in the background
-    getSupabase().auth.signOut().catch(err => {
+    supabase.auth.signOut().catch(err => {
       console.error('Background signout error:', err);
     });
   }
@@ -294,7 +289,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.log('Updating profile for user:', user.id)
       console.log('Current profile state:', profile)
       console.log('Updates to apply:', updates)
-      const supabase = getSupabase()
+      const supabaseClient = supabase
 
       // Upsert ensures the row is created if missing and updated if present
       const payload = { 
@@ -312,7 +307,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
       console.log('Full payload for upsert:', payload)
 
-      const { data, error } = await supabase
+      const { data, error } = await supabaseClient
         .from('user_profiles')
         .upsert(payload, { onConflict: 'id' })
         .select()

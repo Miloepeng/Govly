@@ -43,3 +43,5 @@ echo "🔍 Check logs if there are issues:"
 echo "   pm2 logs --lines 20"
 
 
+
+

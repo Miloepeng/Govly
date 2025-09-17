@@ -79,3 +79,5 @@ echo "   3. Check if there are network issues"
 echo "   4. Try accessing it directly: curl http://localhost:8000/health"
 
 
+
+
