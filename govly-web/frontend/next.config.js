@@ -8,7 +8,7 @@ dotenv.config({ path: path.resolve(__dirname, '../.env') })
 const nextConfig = {
   async rewrites() {
     // Use environment variable or fallback to localhost for development
-    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000'
+    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
     
     return [
       {
