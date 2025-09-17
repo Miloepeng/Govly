@@ -37,6 +37,7 @@ interface PDFViewerProps {
   searchQuery?: string;
   onLoadSuccess?: () => void;
   onLoadError?: (error: any) => void;
+  scrollToSection?: string;
 }
 
 export default function PDFViewer({
@@ -46,7 +47,8 @@ export default function PDFViewer({
   persistentHighlights = [],
   searchQuery = '',
   onLoadSuccess,
-  onLoadError
+  onLoadError,
+  scrollToSection
 }: PDFViewerProps) {
   
   const [numPages, setNumPages] = useState<number>(0);
@@ -62,6 +64,8 @@ export default function PDFViewer({
   const [error, setError] = useState<string | null>(null);
   const [extractedText, setExtractedText] = useState<string>('');
   const [pageTexts, setPageTexts] = useState<Record<number, string>>({});
+  const [textPositions, setTextPositions] = useState<Record<number, Array<{text: string, x: number, y: number}>>>({});
+  const [searchMatches, setSearchMatches] = useState<number[]>([]);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const documentRef = useRef<any>(null);
@@ -72,9 +76,10 @@ export default function PDFViewer({
     setError(null);
     documentRef.current = pdf;
 
-    // Extract text from all pages
+    // Extract text from all pages with positional data
     try {
       const allTexts: Record<number, string> = {};
+      const allPositions: Record<number, Array<{text: string, x: number, y: number}>> = {};
       let fullText = '';
 
       for (let i = 1; i <= pdf.numPages; i++) {
@@ -84,11 +89,20 @@ export default function PDFViewer({
           .map((item: any) => item.str)
           .join(' ');
 
+        // Extract positional data for each text item
+        const positions = textContent.items.map((item: any) => ({
+          text: item.str,
+          x: item.transform[4], // x coordinate
+          y: item.transform[5]  // y coordinate
+        }));
+
         allTexts[i] = pageText;
+        allPositions[i] = positions;
         fullText += `\n--- Page ${i} ---\n${pageText}`;
       }
 
       setPageTexts(allTexts);
+      setTextPositions(allPositions);
       setExtractedText(fullText);
 
       // Pass extracted text to parent component for AI analysis
@@ -161,22 +175,92 @@ export default function PDFViewer({
     document.body.removeChild(link);
   };
 
+  // Function to find and scroll to a specific section
+  const scrollToSectionInPDF = useCallback((sectionName: string) => {
+    if (!sectionName || Object.keys(textPositions).length === 0) return null;
+
+    console.log('🔍 Looking for section in PDF:', sectionName);
+
+    // Try multiple search variations
+    const searchTerms = [
+      sectionName,
+      sectionName.toLowerCase(),
+      `# ${sectionName}`,
+      `## ${sectionName}`,
+      sectionName.replace(/\s+/g, ' ').trim(),
+      sectionName.replace(/\b(section|part|chapter|article)\b/gi, '').trim()
+    ];
+
+    // Search through all pages
+    for (const [pageNum, positions] of Object.entries(textPositions)) {
+      const pageNumber = parseInt(pageNum);
+
+      // Search through all text items on this page
+      for (let i = 0; i < positions.length; i++) {
+        const position = positions[i];
+
+        // Check if any search term matches
+        for (const term of searchTerms) {
+          if (term && position.text.toLowerCase().includes(term.toLowerCase())) {
+            console.log(`✅ Found "${sectionName}" on page ${pageNumber} at coordinates (${position.x}, ${position.y})`);
+
+            // Navigate to the page
+            setPageNumber(pageNumber);
+
+            // Return position information for potential future scrolling within page
+            return {
+              page: pageNumber,
+              x: position.x,
+              y: position.y,
+              text: position.text
+            };
+          }
+        }
+      }
+    }
+
+    console.log(`❌ Section "${sectionName}" not found in PDF`);
+    return null;
+  }, [textPositions]);
+
   // Search functionality within PDF
   const searchInPDF = useCallback((query: string) => {
     if (!query.trim() || !extractedText) return [];
 
     const matches = [];
-    const lowerQuery = query.toLowerCase();
-    const lowerText = extractedText.toLowerCase();
 
-    // Find all page matches
+    // Try multiple search variations for better matching
+    const searchTerms = [
+      query,
+      query.toLowerCase(),
+      query.toUpperCase(),
+      `# ${query}`,
+      `## ${query}`,
+      query.replace(/\s+/g, ' ').trim(),
+      query.replace(/\b(section|part|chapter|article)\b/gi, '').trim()
+    ].filter(term => term.length > 1);
+
+    console.log('🔍 PDF Enhanced search terms:', searchTerms);
+
+    // Find all page matches using multiple search terms
     for (const [pageNum, text] of Object.entries(pageTexts)) {
-      if (text.toLowerCase().includes(lowerQuery)) {
-        matches.push(parseInt(pageNum));
+      const lowerText = text.toLowerCase();
+
+      // Check if any search term matches
+      for (const term of searchTerms) {
+        if (lowerText.includes(term.toLowerCase())) {
+          const pageNumber = parseInt(pageNum);
+          if (!matches.includes(pageNumber)) {
+            matches.push(pageNumber);
+            console.log(`📄 Found "${term}" on page ${pageNumber}`);
+          }
+          break; // Found a match on this page, move to next page
+        }
       }
     }
 
-    return matches;
+    console.log(`🎯 Search for "${query}" found on pages:`, matches);
+    return matches.slice(0, 5); // Limit to first 5 matches for performance
   }, [extractedText, pageTexts]);
 
   // Jump to page containing search query
@@ -188,13 +272,26 @@ export default function PDFViewer({
 
       if (matches.length > 0) {
         const targetPage = matches[0];
-        console.log('🎯 PDF: Jumping to page:', targetPage);
+        console.log(`🎯 PDF: Jumping to page ${targetPage} (found on ${matches.length} page${matches.length > 1 ? 's' : ''}: ${matches.join(', ')})`);
+
+        // Store search matches for visual indicators
+        setSearchMatches(matches);
+
+        // Navigate to the first matching page
         setPageNumber(targetPage);
 
+        // If multiple pages found, log them for user awareness
+        if (matches.length > 1) {
+          console.log(`📚 PDF: "${searchQuery}" also found on pages: ${matches.slice(1).join(', ')}`);
+          console.log('💡 PDF: Use page navigation to view other matches (highlighted in orange)');
+        }
+
         // Add visual feedback
-        console.log('✨ PDF: Added visual highlighting');
+        console.log('✨ PDF: Successfully navigated and highlighting');
       } else {
         console.log('❌ PDF: No matches found for:', searchQuery);
+        console.log('💡 PDF: Try a different search term or check if the content exists');
+        setSearchMatches([]); // Clear previous matches
       }
     }
   }, [searchQuery, searchInPDF]);
@@ -205,8 +302,41 @@ export default function PDFViewer({
       setTimeout(() => {
         jumpToSearchResult();
       }, 500);
+    } else {
+      // Clear search matches when search query is empty
+      setSearchMatches([]);
     }
   }, [searchQuery, extractedText, jumpToSearchResult]);
+
+  // Handle scrollToSection prop
+  useEffect(() => {
+    if (scrollToSection && Object.keys(textPositions).length > 0) {
+      console.log('📍 PDF Auto-scroll triggered for:', scrollToSection);
+      const position = scrollToSectionInPDF(scrollToSection);
+      if (position) {
+        console.log('🎯 Found position:', position);
+
+        // First navigate to the page
+        setPageNumber(position.page);
+
+        // Then set search query to highlight the text
+        setSearchQuery(scrollToSection);
+
+        // Add a small delay to ensure page loads, then attempt to find and highlight
+        setTimeout(() => {
+          // Try to find text in the current rendered page and scroll to it
+          jumpToSearchResult();
+        }, 500);
+      } else {
+        // Fallback: try a broader search if exact position not found
+        console.log('🔍 Trying fallback search for:', scrollToSection);
+        setSearchQuery(scrollToSection);
+        setTimeout(() => {
+          jumpToSearchResult();
+        }, 500);
+      }
+    }
+  }, [scrollToSection, textPositions, scrollToSectionInPDF, jumpToSearchResult]);
 
   if (error) {
     return (
@@ -333,7 +463,8 @@ export default function PDFViewer({
       {/* PDF Document */}
       <div
         ref={containerRef}
-        className="flex-1 overflow-auto bg-gray-200 p-4 flex justify-center"
+        className="flex-1 overflow-y-auto bg-gray-200 p-4 flex justify-center"
+        style={{ height: 'calc(100vh - 160px)' }}
       >
         {isLoading && (
           <div className="flex items-center justify-center h-full">
@@ -370,15 +501,20 @@ export default function PDFViewer({
               {Array.from({ length: Math.min(numPages, 10) }, (_, i) => {
                 const page = i + 1;
                 const isActive = page === pageNumber;
+                const hasSearchMatch = searchMatches.includes(page);
+
                 return (
                   <button
                     key={page}
                     onClick={() => setPageNumber(page)}
-                    className={`w-8 h-8 text-xs rounded ${
+                    className={`w-8 h-8 text-xs rounded relative ${
                       isActive
                         ? 'bg-red-600 text-white'
+                        : hasSearchMatch
+                        ? 'bg-orange-200 text-orange-800 hover:bg-orange-300 border-2 border-orange-400'
                         : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
                     }`}
+                    title={hasSearchMatch ? `Page ${page} - Contains search results` : `Page ${page}`}
                   >
                     {page}
                   </button>

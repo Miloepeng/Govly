@@ -8,8 +8,9 @@ function copyWorker() {
   if (!fs.existsSync(publicDir)) fs.mkdirSync(publicDir);
 
   const tryPaths = [
-    path.join(projectRoot, 'node_modules', 'react-pdf', 'node_modules', 'pdfjs-dist', 'build', 'pdf.worker.min.mjs'),
+    path.join(projectRoot, 'node_modules', 'pdfjs-dist', 'build', 'pdf.worker.min.js'),
     path.join(projectRoot, 'node_modules', 'pdfjs-dist', 'build', 'pdf.worker.min.mjs'),
+    path.join(projectRoot, 'node_modules', 'react-pdf', 'node_modules', 'pdfjs-dist', 'build', 'pdf.worker.min.mjs'),
   ];
 
   const dest = path.join(publicDir, 'pdf.worker.min.js');

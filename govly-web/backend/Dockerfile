@@ -13,6 +13,7 @@ WORKDIR /app
 COPY requirements.txt requirements.docker.txt ./
 RUN pip install --no-cache-dir -r requirements.docker.txt
 
+
 # Copy application code
 COPY . .
 

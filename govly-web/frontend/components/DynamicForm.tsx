@@ -42,6 +42,12 @@ export default function DynamicForm({
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<{ field: string; value: string }[]>([]);
   const [autofillSuggestions, setAutofillSuggestions] = useState<Record<string, string>>({});
+  const [toast, setToast] = useState<{ message: string; variant: 'success' | 'error' | 'info' } | null>(null);
+
+  function showToast(message: string, variant: 'success' | 'error' | 'info' = 'info') {
+    setToast({ message, variant });
+    setTimeout(() => setToast(null), 3000);
+  }
 
   // When parent sends formState, sync it in
   useEffect(() => {
@@ -171,7 +177,7 @@ export default function DynamicForm({
     console.log('🚀 Submit button clicked!', { user: user?.id, formData });
     
     if (!user) {
-      alert("Please sign in to submit applications.");
+      showToast("Please sign in to submit applications.", 'error');
       return;
     }
     
@@ -205,15 +211,15 @@ export default function DynamicForm({
       
       if (error) {
         console.error('❌ Submit error:', error);
-        alert(`Failed to save application: ${error.message || 'Unknown error'}`);
+        showToast(`Failed to save application: ${error.message || 'Unknown error'}`, 'error');
         return;
       }
 
       console.log('✅ Application saved successfully!');
-      alert("Application submitted and saved! You can track it on the Status page.");
+      showToast("Application submitted!", 'success');
     } catch (error) {
       console.error('💥 Submit error:', error);
-      alert(`Failed to save application: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      showToast(`Failed to save application: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
     }
   };
 
@@ -439,6 +445,13 @@ export default function DynamicForm({
 
   return (
     <div className="p-4 border rounded-lg bg-white shadow">
+      {toast && (
+        <div className="fixed top-4 inset-x-0 z-50 flex justify-center">
+          <div className={`${toast.variant === 'success' ? 'bg-green-600' : toast.variant === 'error' ? 'bg-red-600' : 'bg-blue-600'} text-white px-4 py-2 rounded-md shadow-lg` }>
+            {toast.message}
+          </div>
+        </div>
+      )}
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-xl font-semibold text-gray-900">Dynamic Form</h2>
         <button

@@ -24,10 +24,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let isMounted = true
 
-    // Try to get session from localStorage first
-    const localToken = localStorage.getItem('sb-access-token');
-    if (localToken) {
-      setSession({ access_token: localToken } as Session);
+    // Try to get session from sessionStorage first
+    const sessionToken = sessionStorage.getItem('sb-access-token');
+    if (sessionToken) {
+      setSession({ access_token: sessionToken } as Session);
       setLoading(false); // Show content immediately if we have a token
     }
 
@@ -223,19 +223,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       console.log('Sign in successful:', data.user.id);
       
-      // Store tokens in localStorage and cookies (for middleware)
-      if (data.session) {
-        const accessToken = data.session.access_token;
-        const refreshToken = data.session.refresh_token;
+        // Store tokens in sessionStorage and session cookies (for middleware)
+        if (data.session) {
+          const accessToken = data.session.access_token;
+          const refreshToken = data.session.refresh_token;
 
-        // localStorage for client use
-        localStorage.setItem('sb-access-token', accessToken);
-        localStorage.setItem('sb-refresh-token', refreshToken);
+          // sessionStorage for client use (cleared when browser closes)
+          sessionStorage.setItem('sb-access-token', accessToken);
+          sessionStorage.setItem('sb-refresh-token', refreshToken);
 
-        // Cookies for middleware (client-set, not httpOnly)
-        const maxAge = 60 * 60 * 24 * 7; // 7 days
-        document.cookie = `sb-access-token=${accessToken}; path=/; max-age=${maxAge}`;
-        document.cookie = `sb-refresh-token=${refreshToken}; path=/; max-age=${maxAge}`;
+          // Session cookies for middleware (expires when browser closes)
+          document.cookie = `sb-access-token=${accessToken}; path=/`;
+          document.cookie = `sb-refresh-token=${refreshToken}; path=/`;
         console.log('Tokens stored successfully (localStorage + cookies)');
       }
 
@@ -266,12 +265,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setSession(null);
     setProfile(null);
     
-    // Clear storage
-    localStorage.clear();
+    // Clear sessionStorage
+    sessionStorage.clear();
     
     // Clear cookies
-    document.cookie = 'sb-access-token=; path=/; max-age=0';
-    document.cookie = 'sb-refresh-token=; path=/; max-age=0';
+    document.cookie = 'sb-access-token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+    document.cookie = 'sb-refresh-token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
     
     // Navigate immediately
     window.location.replace('/login');

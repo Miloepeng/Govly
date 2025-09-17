@@ -39,19 +39,6 @@ export default function Home() {
   const [agencyDetection, setAgencyDetection] = useState<any>(null);
   const [isTyping, setIsTyping] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const handleUploadClick = () => {
-    fileInputRef.current?.click();
-  };
-
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      console.log('File selected:', file.name);
-      // TODO: Add file upload logic here
-    }
-  };
 
 
   const handleConfirmDeleteChat = () => {
@@ -151,13 +138,63 @@ export default function Home() {
     }
   };
 
-  // Handle category parameter from URL
+  // Handle category parameter from URL and create new chat
   useEffect(() => {
     if (router.isReady && router.query.category) {
       const category = router.query.category as string;
       if (category === 'housing' || category === 'business') {
         setSelectedCategory(category);
         console.log('Category set from URL:', category);
+        
+        // Check for an empty chat at the top of the list
+        const convs = getStoredConversations();
+        const latestChat = convs[0];
+        const latestChatMessages = latestChat ? JSON.parse(localStorage.getItem(`chat:${latestChat.id}`) || '[]') : [];
+        
+        let chatId;
+        
+        if (latestChat && latestChatMessages.length === 0) {
+          // Reuse the empty chat
+          chatId = latestChat.id;
+          setCurrentChatId(chatId);
+          setMessages([]);
+          
+          // Update its timestamp to keep it at top
+          const updatedChats = [
+            { ...latestChat, updatedAt: Date.now() },
+            ...convs.slice(1)
+          ];
+          saveStoredConversations(updatedChats);
+        } else {
+          // Create new chat
+          chatId = `${Date.now()}`;
+          setCurrentChatId(chatId);
+          setMessages([]);
+          
+          // Save empty chat
+          localStorage.setItem(`chat:${chatId}`, JSON.stringify([]));
+          
+          // Add to conversations list
+          const newChats = [{ 
+            id: chatId, 
+            title: 'New Chat', 
+            updatedAt: Date.now() 
+          }, ...convs];
+          saveStoredConversations(newChats);
+        }
+        
+        // Update URL with new chat ID
+        router.replace(
+          { 
+            pathname: '/', 
+            query: { 
+              chatId: chatId, 
+              category 
+            } 
+          }, 
+          undefined, 
+          { shallow: true }
+        );
       }
     }
   }, [router.isReady, router.query.category]);
@@ -212,6 +249,26 @@ export default function Home() {
   }
 
   // Restore chat history and user preferences from localStorage on component mount
+  useEffect(() => {
+    // Listen for chat selection events from the sidebar
+    const handleChatSelected = (event: CustomEvent<{ chatId: string }>) => {
+      const chatId = event.detail.chatId;
+      setCurrentChatId(chatId);
+      const stored = localStorage.getItem(`chat:${chatId}`);
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed)) setMessages(parsed);
+        } catch {}
+      } else {
+        setMessages([]);
+      }
+    };
+
+    window.addEventListener('chatSelected', handleChatSelected as EventListener);
+    return () => window.removeEventListener('chatSelected', handleChatSelected as EventListener);
+  }, []);
+
   useEffect(() => {
     // Determine chat to load from URL or start a new one
     const queryId = (router.query.chatId as string) || null;
@@ -1071,71 +1128,60 @@ export default function Home() {
         <div className="bg-gray-50 p-6">
           <div className="max-w-4xl mx-auto">
             {/* Action Buttons */}
-            <div className="flex gap-2 mb-4 justify-between">
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => {
-                      setSelectedButton('smart');
-                      // Clear all results from the most recent message
-                      if (messages.length > 0) {
-                        const lastMessage = messages[messages.length - 1];
-                        setMessages(prev => prev.map(msg => 
-                          msg.id === lastMessage.id 
-                            ? { ...msg, ragResults: undefined, formResults: undefined }
-                            : msg
-                        ));
-                      }
-                    }}
-                    className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-sm transition-all duration-200 ${
-                      selectedButton === 'smart'
-                        ? 'bg-red-600 text-white border-red-600'
-                        : 'bg-white hover:bg-gray-50 text-gray-700 border-gray-200'
-                    }`}
-                  >
-                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                    </svg>
-                    Smart Response
-                  </button>
-                  <button
-                    onClick={() => {
-                      setSelectedButton('ragLink');
-                      // Just set the mode for the next message
-                    }}
-                    className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-sm transition-all duration-200 ${
-                      selectedButton === 'ragLink'
-                        ? 'bg-red-600 text-white border-red-600'
-                        : 'bg-white hover:bg-gray-50 text-gray-700 border-gray-200'
-                    }`}
-                  >
-                    <Search className="h-4 w-4" />
-                    Find Links
-                  </button>
-                  <button
-                    onClick={() => {
-                      setSelectedButton('ragForm');
-                      // Just set the mode for the next message
-                    }}
-                    className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-sm transition-all duration-200 ${
-                      selectedButton === 'ragForm'
-                        ? 'bg-red-600 text-white border-red-600'
-                        : 'bg-white hover:bg-gray-50 text-gray-700 border-gray-200'
-                    }`}
-                  >
-                    <FileText className="h-4 w-4" />
-                    Find Forms
-                  </button>
-                </div>
-                
-                {/* Upload Form Button */}
+            <div className="flex gap-2 mb-4">
                 <button
-                  onClick={handleUploadClick}
-                  className="flex items-center gap-2 px-3 py-2 rounded-xl border text-sm transition-all duration-200 bg-white hover:bg-gray-50 text-gray-700 border-gray-200"
+                  onClick={() => {
+                    setSelectedButton('smart');
+                    // Clear all results from the most recent message
+                    if (messages.length > 0) {
+                      const lastMessage = messages[messages.length - 1];
+                      setMessages(prev => prev.map(msg => 
+                        msg.id === lastMessage.id 
+                          ? { ...msg, ragResults: undefined, formResults: undefined }
+                          : msg
+                      ));
+                    }
+                  }}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-sm transition-all duration-200 ${
+                    selectedButton === 'smart'
+                      ? 'bg-red-600 text-white border-red-600'
+                      : 'bg-white hover:bg-gray-50 text-gray-700 border-gray-200'
+                  }`}
                 >
-                  <Camera className="h-4 w-4" />
-                  Upload Form
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                  </svg>
+                  Smart Response
                 </button>
-              </div>
+                <button
+                  onClick={() => {
+                    setSelectedButton('ragLink');
+                    // Just set the mode for the next message
+                  }}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-sm transition-all duration-200 ${
+                    selectedButton === 'ragLink'
+                      ? 'bg-red-600 text-white border-red-600'
+                      : 'bg-white hover:bg-gray-50 text-gray-700 border-gray-200'
+                  }`}
+                >
+                  <Search className="h-4 w-4" />
+                  Find Links
+                </button>
+                <button
+                  onClick={() => {
+                    setSelectedButton('ragForm');
+                    // Just set the mode for the next message
+                  }}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-sm transition-all duration-200 ${
+                    selectedButton === 'ragForm'
+                      ? 'bg-red-600 text-white border-red-600'
+                      : 'bg-white hover:bg-gray-50 text-gray-700 border-gray-200'
+                  }`}
+                >
+                  <FileText className="h-4 w-4" />
+                  Find Forms
+                </button>
+            </div>
 
 
             <div className="flex items-center gap-2 modern-input px-4 py-2">
@@ -1144,16 +1190,23 @@ export default function Home() {
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter') handleSendMessage();
+                  if (e.key === 'Enter' && !isLoading && input.trim()) {
+                    handleSendMessage();
+                  }
                 }}
-                placeholder="Message Govly..."
+                placeholder={isLoading ? "Govly is thinking..." : "Message Govly..."}
                 className="flex-1 bg-transparent outline-none text-gray-900 placeholder-gray-500 text-base"
-                disabled={isLoading}
               />
               <button
                 onClick={handleSendMessage}
                 disabled={isLoading || !input.trim()}
-                className="p-2 rounded-md text-gray-600 hover:text-red-600 disabled:opacity-50 disabled:cursor-not-allowed transition-transform active:scale-95"
+                className={`p-2 rounded-md transition-all duration-200 ${
+                  isLoading 
+                    ? 'text-gray-300 cursor-not-allowed' 
+                    : input.trim() 
+                      ? 'text-gray-600 hover:text-red-600 active:scale-95' 
+                      : 'text-gray-300 cursor-not-allowed'
+                }`}
                 aria-label="Send"
               >
                 <PaperPlaneIcon className="w-5 h-5" />
@@ -1163,15 +1216,6 @@ export default function Home() {
               Govly can make mistakes. Consider checking important information.
             </p>
             
-            {/* Hidden file input */}
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*,application/pdf"
-              capture="environment"
-              onChange={handleFileChange}
-              className="hidden"
-            />
           </div>
         </div>
       </div>
