@@ -30,6 +30,7 @@ services:
       dockerfile: Dockerfile
       args:
         NEXT_PUBLIC_API_URL: http://backend:8000
+        NEXT_PUBLIC_BACKEND_URL: http://backend:8000
         NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
         NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY}
     ports:
@@ -37,6 +38,7 @@ services:
     environment:
       # Frontend API URL (internal Docker network)
       - NEXT_PUBLIC_API_URL=http://backend:8000
+      - NEXT_PUBLIC_BACKEND_URL=http://backend:8000
       # Supabase configuration (must match .env file)
       - NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}
       - NEXT_PUBLIC_SUPABASE_ANON_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY}
