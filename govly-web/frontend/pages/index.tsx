@@ -111,22 +111,12 @@ export default function Home() {
     
     setIsGeneratingTitle(true);
     try {
-      const response = await fetch('/api/generateChatTitle', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          messages: userMessages.slice(0, 3), // First 3 messages
-          language: selectedLanguage
-        }),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setChatTitle(data.title);
-        console.log('Generated chat title:', data.title);
-      }
+      // Use fallback title generation since the endpoint doesn't exist
+      const fallbackTitle = userMessages[0].length > 30 
+        ? userMessages[0].substring(0, 30) + '...' 
+        : userMessages[0];
+      setChatTitle(fallbackTitle);
+      console.log('Generated chat title:', fallbackTitle);
     } catch (error) {
       console.error('Error generating chat title:', error);
       // Fallback to first message truncated
