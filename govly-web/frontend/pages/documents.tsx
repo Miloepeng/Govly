@@ -272,7 +272,7 @@ export default function DocumentsPage() {
                 placeholder="Search documents, descriptions, or tags..."
                 value={searchQuery}
                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
               />
             </div>
 
@@ -341,7 +341,6 @@ export default function DocumentsPage() {
                     </span>
                   </div>
                 </div>
-                {/* View Button */}
                 <button className="opacity-0 group-hover:opacity-100 transition-opacity p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100">
                   <Eye className="w-4 h-4" />
                 </button>
@@ -394,7 +393,7 @@ export default function DocumentsPage() {
               </div>
 
               {/* Category Badge */}
-              <div className="absolute top-4 right-14">
+              <div className="absolute top-4 right-4">
                 <span className="px-2 py-1 text-xs font-medium bg-white border border-gray-200 rounded-full">
                   {doc.category}
                 </span>

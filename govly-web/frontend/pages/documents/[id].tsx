@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/router';
-import { ArrowLeft, MessageSquare, Send, FileText, ExternalLink, Maximize2, Minimize2, Quote } from 'lucide-react';
+import { ArrowLeft, MessageSquare, Send, FileText, ExternalLink, Maximize2, Minimize2, Search, Quote, MapPin } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import dynamic from 'next/dynamic';
-const PDFViewerAdvanced = dynamic(() => import('../../components/PDFViewerAdvanced'), { ssr: false });
+const PDFViewer = dynamic(() => import('../../components/PDFViewer'), { ssr: false });
 import WebsiteViewer from '../../components/WebsiteViewer';
 
 interface Document {
@@ -359,10 +359,11 @@ export default function DocumentViewerPage() {
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  // Search removed
+  const [searchQuery, setSearchQuery] = useState('');
+  const [highlightedSections, setHighlightedSections] = useState<string[]>([]);
+  const [persistentHighlights, setPersistentHighlights] = useState<string[]>([]);
   const [extractedContent, setExtractedContent] = useState<string>('');
   const [isDocumentLoading, setIsDocumentLoading] = useState<boolean>(true);
-  // Scroll to section removed
 
   useEffect(() => {
     if (id) {
@@ -450,7 +451,104 @@ export default function DocumentViewerPage() {
     console.error('Document load error:', error);
   };
 
-  // Removed: scrollToSection/search injection
+  const scrollToSection = (sectionName: string) => {
+    console.log('🎯 Scrolling to section:', sectionName);
+    console.log('📄 Document type:', document?.type);
+    console.log('📝 Extracted content length:', extractedContent?.length || 0);
+
+    // Add persistent highlighting first (always visible)
+    setPersistentHighlights(prev => {
+      const newHighlights = [...prev];
+      if (!newHighlights.includes(sectionName)) {
+        newHighlights.push(sectionName);
+      }
+      return newHighlights;
+    });
+
+    // Add temporary visual highlight for immediate feedback
+    setHighlightedSections([sectionName]);
+    setTimeout(() => setHighlightedSections([]), 3000);
+
+    // For PDF viewer - search for section and navigate to correct page
+    if (document?.type === 'pdf' && extractedContent) {
+      console.log('🔍 Searching PDF content for:', sectionName);
+
+      // Try multiple search variations
+      const searchTerms = [
+        sectionName,
+        sectionName.toLowerCase(),
+        `# ${sectionName}`,
+        `## ${sectionName}`,
+        sectionName.replace(/\s+/g, ' ').trim(), // Normalize spaces
+        // Try without common words
+        sectionName.replace(/\b(section|part|chapter|article)\b/gi, '').trim()
+      ];
+
+      const lines = extractedContent.split('\n');
+      let targetPage = 1;
+      let foundMatch = false;
+
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+
+        // Track current page
+        const pageMatch = line.match(/--- Page (\d+) ---/);
+        if (pageMatch) {
+          targetPage = parseInt(pageMatch[1]);
+          continue;
+        }
+
+        // Check all search terms
+        for (const term of searchTerms) {
+          if (term && line.toLowerCase().includes(term.toLowerCase())) {
+            console.log(`✅ Found "${sectionName}" on page ${targetPage}: ${line.substring(0, 100)}...`);
+
+            // Set search query to highlight the text in PDF viewer
+            setSearchQuery(term);
+
+            foundMatch = true;
+            break;
+          }
+        }
+
+        if (foundMatch) break;
+      }
+
+      if (!foundMatch) {
+        console.log('❌ Section not found in PDF, using general search');
+        // Fallback: just search for the section name
+        setSearchQuery(sectionName);
+      }
+    }
+
+    // For website viewers - add visual indicators since we can't control iframe content
+    else if (document?.type === 'link') {
+      console.log('🌐 Adding website section indicator for:', sectionName);
+
+      // For websites, we can only show visual indicators
+      // The search query will be shown in the status bar
+      setSearchQuery(sectionName);
+
+      console.log('✅ Website section highlighting applied');
+    }
+
+    // Fallback for any document with hardcoded content
+    else if (document?.content) {
+      console.log('📖 Searching hardcoded content for:', sectionName);
+
+      const contentLower = document.content.toLowerCase();
+      const sectionLower = sectionName.toLowerCase();
+
+      if (contentLower.includes(sectionLower)) {
+        console.log('✅ Found section in hardcoded content');
+        setSearchQuery(sectionName);
+      } else {
+        console.log('❌ Section not found in hardcoded content');
+      }
+    }
+
+    console.log('🏁 ScrollToSection completed');
+  };
 
   useEffect(() => {
     scrollToBottom();
@@ -458,10 +556,6 @@ export default function DocumentViewerPage() {
 
   const handleSendMessage = async () => {
     if (!newMessage.trim() || !document) return;
-
-    console.log('🚀 Starting message send in document viewer');
-    console.log('📄 Current document ID:', document.id);
-    console.log('📍 Current router pathname:', router.pathname);
 
     const userMessage: ChatMessage = {
       id: Date.now().toString(),
@@ -506,12 +600,7 @@ export default function DocumentViewerPage() {
             citations: [{ text: document.title, section: document.category }]
           };
         } else {
-          console.error('API Response Error:', apiResponse.status, apiResponse.statusText);
-          // Check if it's an unauthorized error that might cause redirect
-          if (apiResponse.status === 401 || apiResponse.status === 403) {
-            console.error('Authentication error - this might cause redirect');
-          }
-          throw new Error(`API request failed: ${apiResponse.status}`);
+          throw new Error('API request failed');
         }
       } catch (apiError) {
         console.log('Document chat API call failed, using fallback response:', apiError);
@@ -530,7 +619,12 @@ export default function DocumentViewerPage() {
 
       setChatMessages(prev => [...prev, aiMessage]);
 
-      // Removed: do not push referenced sections into PDF search
+      // Auto-scroll to the first referenced section if available
+      if (response.referencedSections && response.referencedSections.length > 0) {
+        setTimeout(() => {
+          scrollToSection(response.referencedSections[0]);
+        }, 1000); // Delay to allow chat message to render first
+      }
     } catch (error) {
       const errorMessage: ChatMessage = {
         id: (Date.now() + 1).toString(),
@@ -541,8 +635,6 @@ export default function DocumentViewerPage() {
       setChatMessages(prev => [...prev, errorMessage]);
     } finally {
       setIsLoading(false);
-      console.log('✅ Message send completed in document viewer');
-      console.log('📍 Final router pathname:', router.pathname);
     }
   };
 
@@ -554,8 +646,8 @@ export default function DocumentViewerPage() {
       if (doc.id === '1') {
         return {
           content: 'According to the Business Registration Guide, the total estimated fees are 11,400,000 VND, which breaks down as follows:\n\n• Business name registration: 100,000 VND\n• Investment certificate: 11,000,000 VND\n• Business registration: 300,000 VND\n\nThese fees may vary depending on your specific business type and location.',
-          citations: [{ text: 'Processing Information', section: 'Processing Information' }],
-          referencedSections: ['Processing Information']
+          citations: [{ text: 'Fees Structure', section: 'Section 5' }],
+          referencedSections: ['Fees Structure']
         };
       }
     }
@@ -564,8 +656,8 @@ export default function DocumentViewerPage() {
       if (doc.id === '1') {
         return {
           content: 'The business registration process typically takes 35-70 working days in total:\n\n• Business name registration: 3-5 working days\n• Investment certificate: 15-45 days (depending on sector)\n• Business registration: 15-20 working days\n\nThe timeline can vary based on the complexity of your business and completeness of documentation.',
-          citations: [{ text: 'Processing Information', section: 'Processing Information' }],
-          referencedSections: ['Processing Information']
+          citations: [{ text: 'Processing Time', section: 'Section 4' }],
+          referencedSections: ['Processing Time']
         };
       }
     }
@@ -574,8 +666,8 @@ export default function DocumentViewerPage() {
       if (doc.id === '1') {
         return {
           content: 'For business registration in Vietnam, you need the following key documents:\n\n• Passport copies of all investors\n• Proof of registered address\n• Business plan and financial projections\n• Articles of association\n• Investment decision documents\n\nMake sure all documents are properly notarized and translated if necessary.',
-          citations: [{ text: 'Required Documents for Registration', section: 'Required Documents for Registration' }],
-          referencedSections: ['Required Documents for Registration']
+          citations: [{ text: 'Required Documents', section: 'Section 3' }],
+          referencedSections: ['Required Documents']
         };
       }
     }
@@ -583,8 +675,8 @@ export default function DocumentViewerPage() {
     if (lowerQuery.includes('permit') && doc.id === '2') {
       return {
         content: 'There are four main types of housing permits in Vietnam:\n\n1. Construction permits for new buildings\n2. Renovation permits for existing structures\n3. Demolition permits\n4. Occupancy permits\n\nEach type has specific requirements and processing procedures.',
-        citations: [{ text: 'Required Information', section: 'Required Information' }],
-        referencedSections: ['Required Information']
+        citations: [{ text: 'Types of Housing Permits', section: 'Section 2' }],
+        referencedSections: ['Types of Housing Permits']
       };
     }
 
@@ -666,15 +758,65 @@ export default function DocumentViewerPage() {
           isFullscreen ? 'w-full' : 'w-2/3'
         }`}>
           <div className="h-full flex flex-col">
-            {/* Search removed */}
+            {/* Document Search and Highlighted Sections */}
+            <div className="p-4 border-b border-gray-200">
+              <div className="space-y-3">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                  <input
+                    type="text"
+                    placeholder="Search in document..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent text-sm"
+                  />
+                </div>
+
+                {/* Highlighted Sections Panel */}
+                {persistentHighlights.length > 0 && (
+                  <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <h4 className="text-xs font-semibold text-red-800">Referenced Sections</h4>
+                      <button
+                        onClick={() => setPersistentHighlights([])}
+                        className="text-xs text-red-600 hover:text-red-800"
+                      >
+                        Clear all
+                      </button>
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      {persistentHighlights.map((section, index) => (
+                        <div
+                          key={index}
+                          className="inline-flex items-center gap-1 px-2 py-1 bg-red-100 text-red-700 rounded text-xs border border-red-300"
+                        >
+                          <div className="w-2 h-2 bg-red-500 rounded-full"></div>
+                          <span>{section}</span>
+                          <button
+                            onClick={() => setPersistentHighlights(prev => prev.filter(h => h !== section))}
+                            className="ml-1 text-red-500 hover:text-red-700"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
 
             {/* Document Content */}
-            <div className="flex-1 overflow-y-auto" ref={documentContentRef}>
+            <div className="flex-1 overflow-hidden" ref={documentContentRef}>
               {document.type === 'pdf' ? (
-                <div className="h-full">
-                  <PDFViewerAdvanced
+                <div>
+                  
+                  <PDFViewer
                     url={document.url}
                     onTextExtracted={handleTextExtracted}
+                    highlightedSections={highlightedSections}
+                    persistentHighlights={persistentHighlights}
+                    searchQuery={searchQuery}
                     onLoadSuccess={handleDocumentLoadSuccess}
                     onLoadError={handleDocumentLoadError}
                   />
@@ -683,6 +825,8 @@ export default function DocumentViewerPage() {
                 <WebsiteViewer
                   url={document.url}
                   onTextExtracted={handleTextExtracted}
+                  highlightedSections={highlightedSections}
+                  persistentHighlights={persistentHighlights}
                   onLoadSuccess={handleDocumentLoadSuccess}
                   onLoadError={handleDocumentLoadError}
                 />
@@ -693,7 +837,7 @@ export default function DocumentViewerPage() {
 
         {/* AI Chatbot Panel */}
         {!isFullscreen && (
-          <div className="w-1/3 bg-white flex flex-col h-full">
+          <div className="w-1/3 bg-white flex flex-col">
             {/* Chat Header */}
             <div className="p-4 border-b border-gray-200">
               <div className="flex items-center gap-3">
@@ -753,7 +897,7 @@ export default function DocumentViewerPage() {
             </div>
 
             {/* Chat Messages */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-4" style={{ height: 'calc(100vh - 280px)' }}>
+            <div className="flex-1 overflow-auto p-4 space-y-4">
               {chatMessages.map((message) => (
                 <div
                   key={message.id}
@@ -782,20 +926,16 @@ export default function DocumentViewerPage() {
                       <div className="mt-2 pt-2 border-t border-gray-300">
                         <p className="text-xs text-gray-500 mb-1">Referenced sections:</p>
                         <div className="flex flex-wrap gap-1">
-                          {message.referencedSections.slice(0, 6).map((section, index) => {
-                            const words = section.split(/\s+/);
-                            if (words.length <= 5) {
-                              return (
-                                <span
-                                  key={index}
-                                  className="inline-flex items-center gap-1 px-2 py-1 bg-blue-50 text-blue-700 rounded text-xs"
-                                >
-                                  {section}
-                                </span>
-                              );
-                            }
-                            return null;
-                          })}
+                          {message.referencedSections.map((section, index) => (
+                            <button
+                              key={index}
+                              onClick={() => scrollToSection(section)}
+                              className="inline-flex items-center gap-1 px-2 py-1 bg-blue-50 text-blue-700 rounded text-xs hover:bg-blue-100 transition-colors"
+                            >
+                              <MapPin className="w-3 h-3" />
+                              {section}
+                            </button>
+                          ))}
                         </div>
                       </div>
                     )}
@@ -826,22 +966,15 @@ export default function DocumentViewerPage() {
                   type="text"
                   value={newMessage}
                   onChange={(e) => setNewMessage(e.target.value)}
-                  onKeyPress={(e) => {
-                    if (e.key === 'Enter' && newMessage.trim() && !isLoading) {
-                      handleSendMessage();
-                    }
-                  }}
-                  placeholder={isLoading ? "AI is analyzing..." : "Ask about this document..."}
-                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent text-sm"
+                  onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
+                  placeholder="Ask about this document..."
+                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent text-sm"
+                  disabled={isLoading}
                 />
                 <button
                   onClick={handleSendMessage}
                   disabled={!newMessage.trim() || isLoading}
-                  className={`p-2 rounded-lg transition-all duration-200 ${
-                    !newMessage.trim() || isLoading
-                      ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                      : 'bg-red-600 text-white hover:bg-red-700'
-                  }`}
+                  className="p-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
                 >
                   <Send className="w-4 h-4" />
                 </button>

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Settings, Trash2, PanelLeftOpen, PanelLeftClose, MessageSquare } from 'lucide-react';
+import { Settings, Trash2, PanelLeftOpen, PanelLeftClose } from 'lucide-react';
 import { ChatBubbleIcon, FileTextIcon } from '@radix-ui/react-icons';
 
 interface SettingsState {
@@ -26,7 +26,6 @@ export default function Sidebar({ settings, onSettingsChange, userProfile, onLog
   const [savedChats, setSavedChats] = useState<Array<{ id: string; title: string; updatedAt: number }>>([]);
   const [isSettingsOpenExpanded, setIsSettingsOpenExpanded] = useState(false);
   const [isSettingsOpenCollapsed, setIsSettingsOpenCollapsed] = useState(false);
-  const [currentChatId, setCurrentChatId] = useState<string | null>(null);
 
   useEffect(() => {
     function loadChats() {
@@ -46,29 +45,6 @@ export default function Sidebar({ settings, onSettingsChange, userProfile, onLog
     return () => window.removeEventListener('storage', onStorage);
   }, []);
 
-  useEffect(() => {
-    const updateFromUrl = () => {
-      try {
-        const id = new URLSearchParams(window.location.search).get('chatId');
-        setCurrentChatId(id);
-      } catch {}
-    };
-    updateFromUrl();
-    const onPopState = () => updateFromUrl();
-    const onChatSelected = (e: Event) => {
-      try {
-        const detail = (e as CustomEvent).detail as { chatId?: string };
-        if (detail?.chatId) setCurrentChatId(detail.chatId);
-      } catch {}
-    };
-    window.addEventListener('popstate', onPopState);
-    window.addEventListener('chatSelected', onChatSelected as EventListener);
-    return () => {
-      window.removeEventListener('popstate', onPopState);
-      window.removeEventListener('chatSelected', onChatSelected as EventListener);
-    };
-  }, []);
-
   function startNewChatFromSidebar() {
     const newId = `${Date.now()}`;
     localStorage.setItem(`chat:${newId}`, JSON.stringify([]));
@@ -83,34 +59,14 @@ export default function Sidebar({ settings, onSettingsChange, userProfile, onLog
   function openChat(chatId: string) {
     const search = new URLSearchParams(window.location.search);
     search.set('chatId', chatId);
-    // Use router.push for client-side navigation
-    window.history.pushState({}, '', `/${search.toString() ? `?${search.toString()}` : ''}`);
-    // Trigger a custom event to notify the parent component
-    window.dispatchEvent(new CustomEvent('chatSelected', { detail: { chatId } }));
+    window.location.href = `/${search.toString() ? `?${search.toString()}` : ''}`;
   }
 
   function deleteChat(chatId: string) {
-    const currentChatId = new URLSearchParams(window.location.search).get('chatId');
-    const isCurrentChat = currentChatId === chatId;
-
     localStorage.removeItem(`chat:${chatId}`);
     const updated = savedChats.filter(c => c.id !== chatId);
     localStorage.setItem('chatConversations', JSON.stringify(updated));
     setSavedChats(updated);
-
-    // If we're deleting the current chat, create a new one
-    if (isCurrentChat) {
-      const newId = `${Date.now()}`;
-      localStorage.setItem(`chat:${newId}`, JSON.stringify([]));
-      const newChats = [{ id: newId, title: 'New chat', updatedAt: Date.now() }, ...updated];
-      localStorage.setItem('chatConversations', JSON.stringify(newChats));
-      setSavedChats(newChats);
-      
-      const search = new URLSearchParams(window.location.search);
-      search.set('chatId', newId);
-      window.history.pushState({}, '', `/${search.toString() ? `?${search.toString()}` : ''}`);
-      window.dispatchEvent(new CustomEvent('chatSelected', { detail: { chatId: newId } }));
-    }
   }
 
   return (
@@ -171,17 +127,15 @@ export default function Sidebar({ settings, onSettingsChange, userProfile, onLog
             {/* New chat full-width row */}
             <button
               onClick={startNewChatFromSidebar}
-              className="w-full flex items-center gap-3 px-4 py-3 mb-4 rounded-lg bg-white hover:bg-gray-100 border border-gray-200 transition-colors"
+              className="w-full h-12 mb-2 rounded-xl border border-rose-200 bg-rose-50 hover:bg-rose-100 text-sm text-rose-700 flex items-center justify-center gap-2"
               title="New Chat"
             >
-              <div className="flex-shrink-0 w-4 h-4">
-                <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                </svg>
-              </div>
-              <span className="text-sm text-gray-800">New chat</span>
+              <svg className="h-4 w-4 text-rose-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              New chat
             </button>
-            <div className="space-y-1 max-h-[calc(100vh-400px)] overflow-y-auto pr-1 -mx-2 px-2">
+            <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
               {savedChats.length === 0 ? (
                 <div className="text-xs text-gray-500">No saved chats</div>
               ) : (
@@ -192,32 +146,17 @@ export default function Sidebar({ settings, onSettingsChange, userProfile, onLog
                   <div key={chat.id} className="group relative">
                     <button
                       onClick={() => openChat(chat.id)}
-                      className={`w-full text-left px-4 py-3 rounded-lg transition-colors flex items-center gap-3 ${currentChatId === chat.id ? 'bg-gray-100' : 'hover:bg-gray-100'}`}
+                      className="w-full h-12 text-left pl-5 pr-12 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 hover:border-red-300 text-sm text-gray-800 truncate"
                       title={chat.title || 'Untitled chat'}
                     >
-                      <div className="flex-shrink-0 w-4 h-4">
-                        <MessageSquare className="w-4 h-4 text-gray-500" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm text-gray-800 truncate">
-                            {chat.title || 'Untitled chat'}
-                          </span>
-                        </div>
-                        <div className="text-xs text-gray-500 truncate">
-                          {new Date(chat.updatedAt).toLocaleDateString()} • {new Date(chat.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </div>
-                      </div>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          deleteChat(chat.id);
-                        }}
-                        className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-gray-200 rounded"
-                        title="Delete chat"
-                      >
-                        <Trash2 className="w-3.5 h-3.5 text-gray-500" />
-                      </button>
+                      {chat.title || 'Untitled chat'}
+                    </button>
+                    <button
+                      onClick={() => deleteChat(chat.id)}
+                      className="hidden group-hover:flex items-center justify-center absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-lg border border-gray-200 bg-white hover:bg-gray-50"
+                      title="Delete chat"
+                    >
+                      <Trash2 className="w-4 h-4 text-gray-600" />
                     </button>
                   </div>
                 ))

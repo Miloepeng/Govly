@@ -318,249 +318,11 @@ class DocumentChatRequest(BaseModel):
     documentContent: str
     documentType: str = "pdf"
     conversationContext: List[Dict[str, Any]] = []
-    queryType: Optional[str] = "auto"  # auto, summary, search, explain, compare, steps
-
-class DocumentSummaryRequest(BaseModel):
-    documentId: str
-    documentTitle: str
-    documentContent: str
-    documentType: str = "pdf"
-    summaryType: str = "overview"  # overview, key-points, requirements
-
-class DocumentSearchRequest(BaseModel):
-    query: str
-    documentId: str
-    documentTitle: str
-    documentContent: str
-    documentType: str = "pdf"
-
-class DocumentExplainRequest(BaseModel):
-    concept: str
-    documentId: str
-    documentTitle: str
-    documentContent: str
-    documentType: str = "pdf"
-    detailLevel: str = "medium"  # brief, medium, detailed
-
-# ---------------- Main Chatbot Specialized Requests ----------------
-
-class QuickAnswerRequest(BaseModel):
-    question: str
-    context: Optional[str] = ""
-    conversationHistory: List[Dict[str, Any]] = []
-
-class StepGuideRequest(BaseModel):
-    task: str
-    userContext: Optional[str] = ""  # User's situation/constraints
-    detailLevel: str = "standard"  # brief, standard, detailed
-    conversationHistory: List[Dict[str, Any]] = []
-
-class ComparisonRequest(BaseModel):
-    options: List[str]  # Things to compare
-    criteria: Optional[str] = ""  # What to compare on
-    userNeeds: Optional[str] = ""  # User's specific requirements
-    conversationHistory: List[Dict[str, Any]] = []
-
-class ProblemSolverRequest(BaseModel):
-    problem: str
-    context: Optional[str] = ""  # Additional context about the situation
-    urgency: str = "medium"  # low, medium, high
-    conversationHistory: List[Dict[str, Any]] = []
-
-class CreativeAssistRequest(BaseModel):
-    prompt: str
-    domain: Optional[str] = ""  # business, marketing, personal, etc.
-    constraints: Optional[str] = ""  # Any limitations or requirements
-    ideaCount: int = 5  # Number of ideas to generate
-    conversationHistory: List[Dict[str, Any]] = []
-
-class WebsiteRenderRequest(BaseModel):
-    url: str
-    scrollToSection: Optional[str] = None
-    highlightTerms: Optional[List[str]] = []
-    viewportWidth: int = 1280
-    viewportHeight: int = 800
-
-# ---------------- Helper Functions for Smart AI ----------------
-
-def classify_query_type(message: str) -> str:
-    """Classify the user's query to determine appropriate response style"""
-    message_lower = message.lower()
-
-    # Summary queries
-    if any(word in message_lower for word in ['summarize', 'overview', 'summary', 'what is this', 'explain this document']):
-        return 'summary'
-
-    # Search queries
-    if any(word in message_lower for word in ['find', 'where', 'search', 'locate', 'show me']):
-        return 'search'
-
-    # Explanation queries
-    if any(word in message_lower for word in ['explain', 'how does', 'what does', 'clarify', 'break down']):
-        return 'explain'
-
-    # Step/process queries
-    if any(word in message_lower for word in ['steps', 'process', 'how to', 'procedure', 'guide']):
-        return 'steps'
-
-    # Comparison queries
-    if any(word in message_lower for word in ['compare', 'difference', 'vs', 'versus', 'contrast']):
-        return 'compare'
-
-    # Default to general chat
-    return 'general'
-
-def get_smart_token_limit(query_type: str, message_length: int) -> int:
-    """Determine appropriate response length based on query type and complexity"""
-    base_limits = {
-        'summary': 300,
-        'search': 200,
-        'explain': 500,
-        'steps': 400,
-        'compare': 350,
-        'general': 300
-    }
-
-    # Adjust based on message length (longer questions get longer answers)
-    if message_length > 100:
-        return min(base_limits[query_type] + 200, 800)
-    elif message_length < 20:
-        return max(base_limits[query_type] - 100, 150)
-
-    return base_limits[query_type]
-
-def create_smart_prompt(request, query_type: str, token_limit: int) -> str:
-    """Create context-aware prompts based on query type"""
-
-    # Base context
-    base_context = f"""You are an AI assistant helping users understand documents.
-
-DOCUMENT: {request.documentTitle} ({request.documentType})
-CONTENT: {request.documentContent[:2500]}
-
-CONVERSATION HISTORY:
-{get_conversation_context(request.conversationContext)}
-
-USER QUESTION: {request.message}"""
-
-    # Query-specific instructions
-    type_instructions = {
-        'summary': """Provide a CONCISE summary focusing on:
-1. Main purpose of the document
-2. Key requirements or information
-3. Important deadlines or fees
-Keep it brief and scannable.""",
-
-        'search': """Find and extract the SPECIFIC information requested.
-Quote exactly from the document and indicate the section.
-Be precise and direct.""",
-
-        'explain': """Provide a CLEAR explanation that:
-1. Defines the concept in simple terms
-2. Explains its relevance to the document
-3. Gives practical implications
-Use examples when helpful.""",
-
-        'steps': """Provide a STEP-BY-STEP guide:
-1. List actions in chronological order
-2. Include requirements for each step
-3. Mention timeframes and costs
-Format as numbered steps.""",
-
-        'compare': """Make a CLEAR comparison:
-1. Identify key differences
-2. Highlight pros/cons
-3. Recommend best option if applicable
-Use a structured format.""",
-
-        'general': """Provide a helpful response that directly answers the question.
-Be conversational but informative."""
-    }
-
-    # Response length guidance
-    length_guidance = f"""
-RESPONSE LENGTH: Aim for {token_limit//4}-{token_limit//3} words. {"Be concise and direct." if token_limit < 300 else "Provide thorough details." if token_limit > 500 else "Balance detail with brevity."}"""
-
-    return f"""{base_context}
-
-{type_instructions.get(query_type, type_instructions['general'])}
-
-{length_guidance}
-
-SECTION REFERENCES: End with "REFERENCED_SECTIONS: [exact quotes from document]" for auto-scroll."""
-
-def get_conversation_context(context_list: List[Dict[str, Any]]) -> str:
-    """Format conversation history for prompt"""
-    if not context_list:
-        return "No previous conversation."
-
-    formatted = []
-    for msg in context_list[-3:]:  # Last 3 messages for context
-        role = msg.get("role", "").title()
-        content = msg.get("content", "")[:200]  # Truncate long messages
-        formatted.append(f"{role}: {content}")
-
-    return "\n".join(formatted)
-
-def classify_main_chat_query(message: str) -> str:
-    """Classify general chat queries for appropriate endpoint routing"""
-    message_lower = message.lower()
-
-    # Quick answer patterns
-    if any(pattern in message_lower for pattern in [
-        'what is', 'what are', 'define', 'meaning of', 'who is', 'when is', 'where is',
-        'how much', 'how many', 'quick question', 'simply put'
-    ]):
-        return 'quick'
-
-    # Step guide patterns
-    if any(pattern in message_lower for pattern in [
-        'how to', 'how do i', 'steps to', 'procedure', 'guide me', 'walk me through',
-        'process of', 'instructions', 'tutorial'
-    ]):
-        return 'steps'
-
-    # Comparison patterns
-    if any(pattern in message_lower for pattern in [
-        'compare', 'vs', 'versus', 'difference between', 'which is better',
-        'pros and cons', 'advantages', 'disadvantages', 'options'
-    ]):
-        return 'compare'
-
-    # Problem solving patterns
-    if any(pattern in message_lower for pattern in [
-        'problem', 'issue', 'error', 'not working', 'help with', 'stuck',
-        'troubleshoot', 'fix', 'solve', 'resolve'
-    ]):
-        return 'solve'
-
-    # Creative patterns
-    if any(pattern in message_lower for pattern in [
-        'ideas for', 'brainstorm', 'creative', 'suggest', 'think of',
-        'come up with', 'innovative', 'alternatives'
-    ]):
-        return 'creative'
-
-    # Default to general conversation
-    return 'general'
-
-def format_chat_history(history: List[Dict[str, Any]]) -> str:
-    """Format conversation history for main chat prompts"""
-    if not history:
-        return ""
-
-    formatted = []
-    for msg in history[-4:]:  # Last 4 messages
-        role = msg.get("role", "").title()
-        content = msg.get("content", "")[:150]  # Truncate
-        formatted.append(f"{role}: {content}")
-
-    return "\n".join(formatted)
 
 # ---------------- Document-Aware Chat endpoint ----------------
 @app.post("/api/documentChat")
 async def document_chat(request: DocumentChatRequest):
-    """Smart AI chat endpoint with adaptive response length and query classification"""
+    """AI chat endpoint specifically for document analysis and Q&A"""
     try:
         print(f"📖 Document chat request for: {request.documentTitle}")
 
@@ -569,28 +331,52 @@ async def document_chat(request: DocumentChatRequest):
         if not api_key:
             raise HTTPException(status_code=500, detail="SEA-LION API key not configured")
 
-        # Classify query type if not specified
-        query_type = request.queryType
-        if query_type == "auto":
-            query_type = classify_query_type(request.message)
-
-        # Determine smart token limit
-        message_length = len(request.message)
-        token_limit = get_smart_token_limit(query_type, message_length)
-
-        print(f"🤖 Query classified as: {query_type}, Token limit: {token_limit}")
-
-        # Initialize the LLM with dynamic parameters
+        # Initialize the LLM
         from simple_llm import SimpleSeaLionLLM
         llm = SimpleSeaLionLLM(
             api_key=api_key,
             model="aisingapore/Llama-SEA-LION-v3-70B-IT",
-            temperature=0.2 if query_type in ['search', 'summary'] else 0.4,  # Lower temp for factual queries
-            max_tokens=token_limit
+            temperature=0.3,  # Lower temperature for more focused document analysis
+            max_tokens=500
         )
 
-        # Create smart prompt based on query type
-        prompt = create_smart_prompt(request, query_type, token_limit)
+        # Build context from conversation history
+        conversation_context = ""
+        if request.conversationContext:
+            for msg in request.conversationContext[-5:]:  # Last 5 messages for context
+                role = msg.get("role", "").title()
+                content = msg.get("content", "")
+                conversation_context += f"{role}: {content}\n"
+
+        # Create document-aware prompt
+        prompt = f"""You are an AI assistant helping users understand and analyze documents.
+
+DOCUMENT INFORMATION:
+Title: {request.documentTitle}
+Type: {request.documentType}
+
+DOCUMENT CONTENT:
+{request.documentContent[:3000]}  # First 3000 chars to avoid token limits
+
+CONVERSATION HISTORY:
+{conversation_context}
+
+USER QUESTION: {request.message}
+
+Please provide a helpful, accurate response based on the document content. When referencing specific information:
+1. Quote the relevant sections exactly as they appear
+2. Indicate which section/heading the information comes from
+3. If discussing fees, timelines, or requirements, be specific with numbers and details
+4. Format your response clearly with bullet points or numbered lists when appropriate
+
+CRITICAL: At the end of your response, if you referenced specific sections, add a "REFERENCED_SECTIONS" list with EXACT text snippets or headings that appear in the document. These will be used to auto-scroll and highlight the document. Use the exact wording from the document (e.g., if the document has "## Key Requirements", use "Key Requirements" not "Requirements").
+
+Example format:
+Your response here...
+
+REFERENCED_SECTIONS: "Processing Time", "Required Documents", "Fees Structure"
+
+Respond in a clear, professional manner."""
 
         # Get AI response
         response = llm._call(prompt)
@@ -618,498 +404,6 @@ async def document_chat(request: DocumentChatRequest):
 
     except Exception as e:
         print(f"💥 Document chat error: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-# ---------------- Specialized Document AI Endpoints ----------------
-
-@app.post("/api/documentSummary")
-async def document_summary(request: DocumentSummaryRequest):
-    """Quick document summaries with different focus types"""
-    try:
-        print(f"📋 Summary request for: {request.documentTitle} ({request.summaryType})")
-
-        api_key = os.getenv("SEA_LION_API_KEY")
-        if not api_key:
-            raise HTTPException(status_code=500, detail="SEA-LION API key not configured")
-
-        from simple_llm import SimpleSeaLionLLM
-        llm = SimpleSeaLionLLM(
-            api_key=api_key,
-            model="aisingapore/Llama-SEA-LION-v3-70B-IT",
-            temperature=0.2,
-            max_tokens=250  # Concise summaries
-        )
-
-        summary_prompts = {
-            'overview': f"""Provide a 3-sentence overview of this document:
-
-DOCUMENT: {request.documentTitle}
-CONTENT: {request.documentContent[:2000]}
-
-Focus on: (1) What this document is, (2) Who needs it, (3) Main requirements or purpose.
-Be extremely concise.""",
-
-            'key-points': f"""Extract 4-5 key bullet points from this document:
-
-DOCUMENT: {request.documentTitle}
-CONTENT: {request.documentContent[:2000]}
-
-Format as bullet points. Focus on the most important information someone needs to know.""",
-
-            'requirements': f"""List the main requirements from this document:
-
-DOCUMENT: {request.documentTitle}
-CONTENT: {request.documentContent[:2000]}
-
-Focus only on what users need to provide, do, or meet. Be specific with numbers, timeframes, and fees."""
-        }
-
-        prompt = summary_prompts.get(request.summaryType, summary_prompts['overview'])
-        response = llm._call(prompt)
-
-        return {
-            "summary": response,
-            "summaryType": request.summaryType,
-            "documentId": request.documentId,
-            "timestamp": datetime.now().isoformat()
-        }
-
-    except Exception as e:
-        print(f"💥 Summary error: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.post("/api/documentSearch")
-async def document_search(request: DocumentSearchRequest):
-    """Precise information lookup within documents"""
-    try:
-        print(f"🔍 Search request: '{request.query}' in {request.documentTitle}")
-
-        api_key = os.getenv("SEA_LION_API_KEY")
-        if not api_key:
-            raise HTTPException(status_code=500, detail="SEA-LION API key not configured")
-
-        from simple_llm import SimpleSeaLionLLM
-        llm = SimpleSeaLionLLM(
-            api_key=api_key,
-            model="aisingapore/Llama-SEA-LION-v3-70B-IT",
-            temperature=0.1,  # Very precise for search
-            max_tokens=200
-        )
-
-        prompt = f"""Find specific information in this document:
-
-DOCUMENT: {request.documentTitle}
-CONTENT: {request.documentContent[:2500]}
-
-SEARCH QUERY: {request.query}
-
-Instructions:
-1. Quote the exact text that answers the query
-2. Indicate which section it's from
-3. If not found, say "Information not found in this document"
-4. Be precise and direct
-
-REFERENCED_SECTIONS: [exact headings where info was found]"""
-
-        response = llm._call(prompt)
-
-        # Parse referenced sections
-        referenced_sections = []
-        if "REFERENCED_SECTIONS" in response:
-            sections_part = response.split("REFERENCED_SECTIONS")[-1]
-            clean_response = response.split("REFERENCED_SECTIONS")[0].strip()
-
-            import re
-            section_matches = re.findall(r'"([^"]+)"', sections_part)
-            referenced_sections = section_matches[:2]
-        else:
-            clean_response = response
-
-        return {
-            "result": clean_response,
-            "query": request.query,
-            "referencedSections": referenced_sections,
-            "documentId": request.documentId,
-            "timestamp": datetime.now().isoformat()
-        }
-
-    except Exception as e:
-        print(f"💥 Search error: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.post("/api/documentExplain")
-async def document_explain(request: DocumentExplainRequest):
-    """Detailed explanations of concepts found in documents"""
-    try:
-        print(f"💡 Explain request: '{request.concept}' in {request.documentTitle}")
-
-        api_key = os.getenv("SEA_LION_API_KEY")
-        if not api_key:
-            raise HTTPException(status_code=500, detail="SEA-LION API key not configured")
-
-        token_limits = {'brief': 200, 'medium': 400, 'detailed': 600}
-        token_limit = token_limits.get(request.detailLevel, 400)
-
-        from simple_llm import SimpleSeaLionLLM
-        llm = SimpleSeaLionLLM(
-            api_key=api_key,
-            model="aisingapore/Llama-SEA-LION-v3-70B-IT",
-            temperature=0.3,
-            max_tokens=token_limit
-        )
-
-        detail_instructions = {
-            'brief': "Explain in 2-3 sentences. Be concise.",
-            'medium': "Provide a clear explanation with practical examples.",
-            'detailed': "Give a comprehensive explanation with context, examples, and implications."
-        }
-
-        prompt = f"""Explain this concept from the document:
-
-DOCUMENT: {request.documentTitle}
-CONTENT: {request.documentContent[:2500]}
-
-CONCEPT TO EXPLAIN: {request.concept}
-
-{detail_instructions.get(request.detailLevel, detail_instructions['medium'])}
-
-Structure:
-1. What it means in simple terms
-2. How it applies in this document context
-3. Practical implications for users
-
-REFERENCED_SECTIONS: [relevant document sections]"""
-
-        response = llm._call(prompt)
-
-        # Parse referenced sections
-        referenced_sections = []
-        if "REFERENCED_SECTIONS" in response:
-            sections_part = response.split("REFERENCED_SECTIONS")[-1]
-            clean_response = response.split("REFERENCED_SECTIONS")[0].strip()
-
-            import re
-            section_matches = re.findall(r'"([^"]+)"', sections_part)
-            referenced_sections = section_matches[:3]
-        else:
-            clean_response = response
-
-        return {
-            "explanation": clean_response,
-            "concept": request.concept,
-            "detailLevel": request.detailLevel,
-            "referencedSections": referenced_sections,
-            "documentId": request.documentId,
-            "timestamp": datetime.now().isoformat()
-        }
-
-    except Exception as e:
-        print(f"💥 Explain error: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-# ---------------- Specialized Main Chatbot Endpoints ----------------
-
-@app.post("/api/quickAnswer")
-async def quick_answer(request: QuickAnswerRequest):
-    """Direct, concise answers for factual questions"""
-    try:
-        print(f"⚡ Quick answer request: {request.question[:50]}...")
-
-        api_key = os.getenv("SEA_LION_API_KEY")
-        if not api_key:
-            raise HTTPException(status_code=500, detail="SEA-LION API key not configured")
-
-        from simple_llm import SimpleSeaLionLLM
-        llm = SimpleSeaLionLLM(
-            api_key=api_key,
-            model="aisingapore/Llama-SEA-LION-v3-70B-IT",
-            temperature=0.1,  # Very factual
-            max_tokens=150   # Keep it short
-        )
-
-        history = format_chat_history(request.conversationHistory)
-        context_part = f"\nContext: {request.context}" if request.context else ""
-
-        prompt = f"""You are a government services assistant helping citizens with quick, factual answers about policies, laws, forms, and procedures.
-
-CONVERSATION HISTORY:
-{history}
-
-CITIZEN QUESTION: {request.question}{context_part}
-
-Instructions:
-1. Provide direct, official information
-2. Use 1-3 sentences maximum
-3. Focus on government policies, laws, or procedures
-4. Mention relevant authorities or departments when applicable
-5. If unsure about specific regulations, advise consulting official sources
-
-Answer:"""
-
-        response = llm._call(prompt)
-
-        return {
-            "answer": response.strip(),
-            "responseType": "quick",
-            "timestamp": datetime.now().isoformat()
-        }
-
-    except Exception as e:
-        print(f"💥 Quick answer error: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.post("/api/stepGuide")
-async def step_guide(request: StepGuideRequest):
-    """Step-by-step procedural guidance"""
-    try:
-        print(f"📋 Step guide request: {request.task[:50]}...")
-
-        api_key = os.getenv("SEA_LION_API_KEY")
-        if not api_key:
-            raise HTTPException(status_code=500, detail="SEA-LION API key not configured")
-
-        token_limits = {'brief': 300, 'standard': 500, 'detailed': 700}
-        token_limit = token_limits.get(request.detailLevel, 500)
-
-        from simple_llm import SimpleSeaLionLLM
-        llm = SimpleSeaLionLLM(
-            api_key=api_key,
-            model="aisingapore/Llama-SEA-LION-v3-70B-IT",
-            temperature=0.3,
-            max_tokens=token_limit
-        )
-
-        history = format_chat_history(request.conversationHistory)
-        context_part = f"\nUser Context: {request.userContext}" if request.userContext else ""
-
-        detail_instructions = {
-            'brief': "Provide 3-5 key steps. Be concise.",
-            'standard': "Provide detailed steps with explanations.",
-            'detailed': "Provide comprehensive steps with tips, warnings, and alternatives."
-        }
-
-        prompt = f"""You are a government services assistant helping citizens navigate government procedures, applications, and compliance requirements.
-
-CONVERSATION HISTORY:
-{history}
-
-GOVERNMENT TASK/PROCEDURE: {request.task}{context_part}
-
-{detail_instructions.get(request.detailLevel, detail_instructions['standard'])}
-
-Provide government-focused guidance:
-1. [Action] - [Requirements, documents needed, or authorities involved]
-2. [Action] - [Timeframes, fees, or important compliance notes]
-
-Include:
-- Required documents and forms
-- Processing times and fees
-- Relevant government departments/agencies
-- Legal requirements or deadlines
-- Contact information where helpful
-
-Steps:"""
-
-        response = llm._call(prompt)
-
-        return {
-            "guide": response.strip(),
-            "task": request.task,
-            "detailLevel": request.detailLevel,
-            "responseType": "steps",
-            "timestamp": datetime.now().isoformat()
-        }
-
-    except Exception as e:
-        print(f"💥 Step guide error: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.post("/api/comparison")
-async def comparison(request: ComparisonRequest):
-    """Structured comparison and analysis"""
-    try:
-        print(f"⚖️ Comparison request: {len(request.options)} options")
-
-        api_key = os.getenv("SEA_LION_API_KEY")
-        if not api_key:
-            raise HTTPException(status_code=500, detail="SEA-LION API key not configured")
-
-        from simple_llm import SimpleSeaLionLLM
-        llm = SimpleSeaLionLLM(
-            api_key=api_key,
-            model="aisingapore/Llama-SEA-LION-v3-70B-IT",
-            temperature=0.3,
-            max_tokens=600
-        )
-
-        history = format_chat_history(request.conversationHistory)
-        criteria_part = f"\nComparison Criteria: {request.criteria}" if request.criteria else ""
-        needs_part = f"\nUser Needs: {request.userNeeds}" if request.userNeeds else ""
-
-        prompt = f"""You are a government services assistant helping citizens compare government policies, programs, visa types, permits, or legal options.
-
-CONVERSATION HISTORY:
-{history}
-
-GOVERNMENT OPTIONS TO COMPARE: {', '.join(request.options)}{criteria_part}{needs_part}
-
-Structure your government-focused comparison:
-1. **Overview** - What each option provides and who it serves
-2. **Requirements** - Eligibility criteria, documents, and qualifications for each
-3. **Costs & Timeline** - Fees, processing times, and validity periods
-4. **Benefits & Limitations** - Rights, restrictions, and practical implications
-5. **Recommendation** - Best fit based on citizen needs and circumstances
-
-Focus on official regulations, legal implications, and practical government processes.
-
-Comparison:"""
-
-        response = llm._call(prompt)
-
-        return {
-            "comparison": response.strip(),
-            "options": request.options,
-            "criteria": request.criteria,
-            "responseType": "compare",
-            "timestamp": datetime.now().isoformat()
-        }
-
-    except Exception as e:
-        print(f"💥 Comparison error: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.post("/api/problemSolver")
-async def problem_solver(request: ProblemSolverRequest):
-    """Troubleshooting and solution-finding"""
-    try:
-        print(f"🔧 Problem solver request: {request.problem[:50]}...")
-
-        api_key = os.getenv("SEA_LION_API_KEY")
-        if not api_key:
-            raise HTTPException(status_code=500, detail="SEA-LION API key not configured")
-
-        # Urgency affects response length and detail
-        token_limits = {'low': 400, 'medium': 500, 'high': 300}  # High urgency = shorter, more direct
-        token_limit = token_limits.get(request.urgency, 500)
-
-        from simple_llm import SimpleSeaLionLLM
-        llm = SimpleSeaLionLLM(
-            api_key=api_key,
-            model="aisingapore/Llama-SEA-LION-v3-70B-IT",
-            temperature=0.2,  # More focused for problem-solving
-            max_tokens=token_limit
-        )
-
-        history = format_chat_history(request.conversationHistory)
-        context_part = f"\nAdditional Context: {request.context}" if request.context else ""
-
-        urgency_instructions = {
-            'low': "Provide thorough analysis with multiple approaches.",
-            'medium': "Provide practical solutions with clear priorities.",
-            'high': "Focus on immediate, actionable solutions first."
-        }
-
-        prompt = f"""You are a government services assistant helping citizens resolve issues with applications, permits, compliance, legal matters, or government procedures.
-
-CONVERSATION HISTORY:
-{history}
-
-GOVERNMENT-RELATED PROBLEM: {request.problem}{context_part}
-URGENCY: {request.urgency}
-
-{urgency_instructions.get(request.urgency, urgency_instructions['medium'])}
-
-Structure your government-focused solution:
-1. **Immediate Actions** - What to do right now (contact agencies, gather documents)
-2. **Official Channels** - Which government departments/offices can help
-3. **Required Steps** - Formal procedures to resolve the issue
-4. **Legal Considerations** - Rights, appeals, or compliance requirements
-5. **Prevention** - How to avoid similar issues with future government processes
-
-Focus on official procedures, legal remedies, and government resources.
-
-Solution:"""
-
-        response = llm._call(prompt)
-
-        return {
-            "solution": response.strip(),
-            "problem": request.problem,
-            "urgency": request.urgency,
-            "responseType": "solve",
-            "timestamp": datetime.now().isoformat()
-        }
-
-    except Exception as e:
-        print(f"💥 Problem solver error: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.post("/api/creativeAssist")
-async def creative_assist(request: CreativeAssistRequest):
-    """Creative brainstorming and ideation"""
-    try:
-        print(f"💡 Creative assist request: {request.prompt[:50]}...")
-
-        api_key = os.getenv("SEA_LION_API_KEY")
-        if not api_key:
-            raise HTTPException(status_code=500, detail="SEA-LION API key not configured")
-
-        from simple_llm import SimpleSeaLionLLM
-        llm = SimpleSeaLionLLM(
-            api_key=api_key,
-            model="aisingapore/Llama-SEA-LION-v3-70B-IT",
-            temperature=0.8,  # High creativity
-            max_tokens=600
-        )
-
-        history = format_chat_history(request.conversationHistory)
-        domain_part = f"\nDomain/Field: {request.domain}" if request.domain else ""
-        constraints_part = f"\nConstraints: {request.constraints}" if request.constraints else ""
-
-        prompt = f"""You are a government policy and services innovation assistant helping suggest creative but practical solutions for government processes, citizen engagement, or policy improvements.
-
-CONVERSATION HISTORY:
-{history}
-
-GOVERNMENT CHALLENGE/REQUEST: {request.prompt}{domain_part}{constraints_part}
-
-Generate {request.ideaCount} innovative government-focused ideas:
-
-1. **[Solution Name]** - [How it improves government services or citizen experience]
-2. **[Solution Name]** - [Policy benefits and implementation feasibility]
-[Continue for all ideas]
-
-Then pick your **top recommendation** considering:
-- Public benefit and accessibility
-- Government resource requirements
-- Legal and regulatory feasibility
-- Citizen satisfaction impact
-
-Focus on solutions that enhance government transparency, efficiency, citizen services, or policy effectiveness.
-
-Ideas:"""
-
-        response = llm._call(prompt)
-
-        return {
-            "ideas": response.strip(),
-            "prompt": request.prompt,
-            "domain": request.domain,
-            "ideaCount": request.ideaCount,
-            "responseType": "creative",
-            "timestamp": datetime.now().isoformat()
-        }
-
-    except Exception as e:
-        print(f"💥 Creative assist error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -2145,14 +1439,15 @@ async def get_document(document_id: str):
         # Use the existing supabase client from rag.query
         client = supabase
         
-        # Try to parse as integer first, then as UUID
+        # Try to parse as UUID first, then as integer
         try:
-            # Try as integer first
-            doc_id = int(document_id)
-            result = client.table("documents").select("*").eq("id", doc_id).execute()
-        except ValueError:
-            # Not an integer, try as UUID
+            import uuid
+            uuid.UUID(document_id)
+            # It's a valid UUID, use as-is
             result = client.table("documents").select("*").eq("id", document_id).execute()
+        except ValueError:
+            # Not a UUID, try as integer
+            result = client.table("documents").select("*").eq("id", int(document_id)).execute()
         
         if not result.data:
             raise HTTPException(status_code=404, detail="Document not found")
@@ -2291,129 +1586,10 @@ async def search_documents(query: str, limit: int = 10):
             })
         
         return {"documents": documents, "query": query, "total": len(documents)}
-
+        
     except Exception as e:
         print(f"💥 Exception in search_documents: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
-
-# ---------------- Website Renderer endpoint ----------------
-@app.post("/api/render-website")
-async def render_website(request: WebsiteRenderRequest):
-    """Render website using Playwright with precise scroll and highlight control"""
-    try:
-        from playwright.async_api import async_playwright
-        import base64
-
-        async with async_playwright() as p:
-            # Launch Chromium browser
-            browser = await p.chromium.launch(
-                headless=True,
-                args=[
-                    '--no-sandbox',
-                    '--disable-setuid-sandbox',
-                    '--disable-dev-shm-usage',
-                    '--disable-web-security'
-                ]
-            )
-
-            context = await browser.new_context(
-                viewport={'width': request.viewportWidth, 'height': request.viewportHeight}
-            )
-            page = await context.new_page()
-
-            # Navigate to URL
-            await page.goto(request.url, wait_until='networkidle', timeout=30000)
-
-            # Extract page text for search capabilities
-            page_text = await page.evaluate('() => document.body.innerText')
-
-            # If scrollToSection is specified, try to scroll to it
-            scroll_position = None
-            if request.scrollToSection:
-                scroll_position = await page.evaluate('''(searchTerm) => {
-                    const searchTermLower = searchTerm.toLowerCase();
-                    const walker = document.createTreeWalker(
-                        document.body,
-                        NodeFilter.SHOW_TEXT,
-                        null,
-                        false
-                    );
-
-                    let node;
-                    while (node = walker.nextNode()) {
-                        if (node.textContent.toLowerCase().includes(searchTermLower)) {
-                            const element = node.parentElement;
-                            element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-
-                            // Highlight the found element
-                            element.style.backgroundColor = '#ffeb3b';
-                            element.style.padding = '4px';
-                            element.style.borderRadius = '4px';
-                            element.style.border = '2px solid #ff9800';
-
-                            return {
-                                found: true,
-                                text: node.textContent.substring(0, 100),
-                                scrollTop: window.pageYOffset
-                            };
-                        }
-                    }
-                    return { found: false };
-                }''', request.scrollToSection)
-
-            # Highlight additional terms if specified
-            if request.highlightTerms:
-                for term in request.highlightTerms:
-                    await page.evaluate('''(term) => {
-                        const walker = document.createTreeWalker(
-                            document.body,
-                            NodeFilter.SHOW_TEXT,
-                            null,
-                            false
-                        );
-
-                        let node;
-                        while (node = walker.nextNode()) {
-                            if (node.textContent.toLowerCase().includes(term.toLowerCase())) {
-                                const element = node.parentElement;
-                                element.style.backgroundColor = '#e3f2fd';
-                                element.style.border = '1px solid #2196f3';
-                                element.style.borderRadius = '2px';
-                            }
-                        }
-                    }''', term)
-
-            # Take screenshot
-            screenshot_bytes = await page.screenshot(full_page=True, type='png')
-
-            # Get page dimensions
-            dimensions = await page.evaluate('''() => {
-                return {
-                    width: document.documentElement.scrollWidth,
-                    height: document.documentElement.scrollHeight,
-                    viewportHeight: window.innerHeight
-                };
-            }''')
-
-            await browser.close()
-
-        # Convert screenshot to base64
-        screenshot_base64 = base64.b64encode(screenshot_bytes).decode('utf-8')
-
-        return {
-            "success": True,
-            "screenshot": screenshot_base64,
-            "pageText": page_text,
-            "scrollPosition": scroll_position,
-            "dimensions": dimensions,
-            "url": request.url,
-            "timestamp": datetime.now().isoformat()
-        }
-
-    except Exception as e:
-        print(f"💥 Website render error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to render website: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn
