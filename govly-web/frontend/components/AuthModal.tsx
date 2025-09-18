@@ -1,27 +1,19 @@
 import React, { useState } from 'react'
-import { X, Eye, EyeOff, User, Mail, Lock, Phone, MapPin, CreditCard } from 'lucide-react'
+import { X, Eye, EyeOff, Mail, Lock } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 
 interface AuthModalProps {
   isOpen: boolean
   onClose: () => void
-  mode: 'signin' | 'signup'
-  onModeChange: (mode: 'signin' | 'signup') => void
 }
 
-export default function AuthModal({ isOpen, onClose, mode, onModeChange }: AuthModalProps) {
-  const { signIn, signUp, loading } = useAuth()
+export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
+  const { signIn, loading } = useAuth()
   const [formData, setFormData] = useState({
     email: '',
-    password: '',
-    confirmPassword: '',
-    fullName: '',
-    phoneNumber: '',
-    address: '',
-    idNumber: '',
+    password: ''
   })
   const [showPassword, setShowPassword] = useState(false)
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [error, setError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -39,31 +31,11 @@ export default function AuthModal({ isOpen, onClose, mode, onModeChange }: AuthM
     setError('')
 
     try {
-      if (mode === 'signin') {
-        const { error } = await signIn(formData.email, formData.password)
-        if (error) {
-          setError(error.message)
-        } else {
-          onClose()
-        }
+      const { error } = await signIn(formData.email, formData.password)
+      if (error) {
+        setError(error.message)
       } else {
-        if (formData.password !== formData.confirmPassword) {
-          setError('Passwords do not match')
-          return
-        }
-        if (formData.password.length < 6) {
-          setError('Password must be at least 6 characters')
-          return
-        }
-        
-        const { error } = await signUp(formData.email, formData.password, formData.fullName)
-        if (error) {
-          setError(error.message)
-        } else {
-          setError('')
-          alert('Account created successfully! Please check your email to verify your account.')
-          onModeChange('signin')
-        }
+        onClose()
       }
     } catch (err) {
       setError('An unexpected error occurred')
@@ -80,7 +52,7 @@ export default function AuthModal({ isOpen, onClose, mode, onModeChange }: AuthM
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-200">
           <h2 className="text-2xl font-bold text-gray-900">
-            {mode === 'signin' ? 'Sign In' : 'Create Account'}
+            Sign In
           </h2>
           <button
             onClick={onClose}
@@ -98,25 +70,6 @@ export default function AuthModal({ isOpen, onClose, mode, onModeChange }: AuthM
             </div>
           )}
 
-          {mode === 'signup' && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Full Name
-              </label>
-              <div className="relative">
-                <User className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-                <input
-                  type="text"
-                  name="fullName"
-                  value={formData.fullName}
-                  onChange={handleInputChange}
-                  required
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Enter your full name"
-                />
-              </div>
-            </div>
-          )}
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -161,56 +114,16 @@ export default function AuthModal({ isOpen, onClose, mode, onModeChange }: AuthM
             </div>
           </div>
 
-          {mode === 'signup' && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Confirm Password
-              </label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-                <input
-                  type={showConfirmPassword ? 'text' : 'password'}
-                  name="confirmPassword"
-                  value={formData.confirmPassword}
-                  onChange={handleInputChange}
-                  required
-                  className="w-full pl-10 pr-12 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Confirm your password"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                >
-                  {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-            </div>
-          )}
 
           <button
             type="submit"
             disabled={isSubmitting || loading}
             className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
-            {isSubmitting ? 'Please wait...' : (mode === 'signin' ? 'Sign In' : 'Create Account')}
+            {isSubmitting ? 'Please wait...' : 'Sign In'}
           </button>
         </form>
 
-        {/* Footer */}
-        <div className="px-6 pb-6">
-          <div className="text-center">
-            <p className="text-gray-600">
-              {mode === 'signin' ? "Don't have an account?" : 'Already have an account?'}
-            </p>
-            <button
-              onClick={() => onModeChange(mode === 'signin' ? 'signup' : 'signin')}
-              className="text-blue-600 hover:text-blue-700 font-medium"
-            >
-              {mode === 'signin' ? 'Sign up' : 'Sign in'}
-            </button>
-          </div>
-        </div>
       </div>
     </div>
   )

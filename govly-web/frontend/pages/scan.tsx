@@ -1,12 +1,14 @@
 import React, { useState, useRef, useCallback } from 'react';
 import { useRouter } from 'next/router';
 import { Upload, FileText, Image, Loader2, AlertCircle, CheckCircle, ArrowLeft, ChevronLeft, ChevronRight, Search } from 'lucide-react';
+import { v4 as uuidv4 } from 'uuid';
 import DynamicForm from '../components/DynamicForm';
 import AgencyDetection from '../components/AgencyDetection';
 import DashboardHeader from '../components/DashboardHeader';
 import { useAuth } from '../contexts/AuthContext';
 import { ApplicationService } from '../lib/applicationService';
 import { FormAutofillService } from '../lib/formAutofillService';
+import toast from 'react-hot-toast';
 
 interface Field {
   name: string;
@@ -123,7 +125,7 @@ function CustomDynamicForm({
     e.preventDefault();
 
     if (!user) {
-      alert("Please sign in to submit applications.");
+      toast.error("Please sign in to submit applications.");
       return;
     }
 
@@ -138,7 +140,7 @@ function CustomDynamicForm({
       // Always create a new application with 'applied' status for now
       // This ensures it works regardless of database schema
       const application = {
-        id: Date.now().toString(),
+        id: uuidv4(),
         formTitle: `Scanned Form - ${detectedAgency?.name || 'Government Form'}`,
         dateApplied: new Date().toISOString(),
         status: "applied" as const,
@@ -159,14 +161,14 @@ function CustomDynamicForm({
 
       if (error) {
         console.error('Submit error:', error);
-        alert(`Failed to save application: ${error.message || 'Unknown error'}`);
+        toast.error(`Failed to save application: ${error.message || 'Unknown error'}`);
         return;
       }
 
       onSubmission();
     } catch (error) {
       console.error('Submit error:', error);
-      alert(`Failed to save application: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      toast.error(`Failed to save application: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setIsSubmitting(false);
     }
@@ -546,8 +548,8 @@ export default function ScanPage() {
       // Use the file name as URL (it's now in the backend forms directory)
       const fileUrl = selectedFile.name;
 
-      // Extract form fields using OCR
-      const extractResponse = await fetch('/api/extractFormPreprocessed', {
+      // Extract form fields using direct OCR (bypasses preprocessed data)
+      const extractResponse = await fetch('/api/extractFormDirect', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

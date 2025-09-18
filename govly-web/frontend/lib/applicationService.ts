@@ -277,4 +277,49 @@ export class ApplicationService {
       return { error }
     }
   }
+
+  static async getApplication(applicationId: string, userId: string): Promise<{ data: ApplicationData | null; error: any }> {
+    try {
+      const { data, error } = await supabase
+        .from('user_applications')
+        .select('*')
+        .eq('id', applicationId)
+        .eq('user_id', userId)
+        .single()
+
+      if (error) {
+        return { data: null, error }
+      }
+
+      const application: ApplicationData = {
+        id: data.id,
+        formTitle: data.form_title,
+        dateApplied: data.created_at,
+        status: data.status,
+        formData: data.form_data,
+        schema: data.schema,
+        progress: data.progress,
+      }
+
+      return { data: application, error: null }
+    } catch (error) {
+      return { data: null, error }
+    }
+  }
+
+  static async updateApplicationData(applicationId: string, formData: Record<string, any>): Promise<{ error: any }> {
+    try {
+      const { error } = await supabase
+        .from('user_applications')
+        .update({
+          form_data: formData,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', applicationId)
+
+      return { error }
+    } catch (error) {
+      return { error }
+    }
+  }
 }

@@ -52,15 +52,34 @@ export default function Home() {
       const updatedChats = savedChats.filter((chat: any) => chat.id !== currentChatId);
       localStorage.setItem('chatConversations', JSON.stringify(updatedChats));
 
-      // Create new chat ID and redirect (refresh page)
+      // Create new chat ID and update state
       const newChatId = `${Date.now()}`;
       localStorage.setItem(`chat:${newChatId}`, JSON.stringify([]));
       const newChats = [{ id: newChatId, title: 'New Chat', updatedAt: Date.now() }, ...updatedChats];
       localStorage.setItem('chatConversations', JSON.stringify(newChats));
 
-      const search = new URLSearchParams(window.location.search);
-      search.set('chatId', newChatId);
-      window.location.href = `/${search.toString() ? `?${search.toString()}` : ''}`;
+      // Update current state
+      setCurrentChatId(newChatId);
+      setMessages([]);
+      setFormSchema(null);
+      setLoadingState(null);
+      setIsLoading(false);
+      setChatTitle('New Chat');
+      setIsGeneratingTitle(false);
+      setSelectedAgency(null);
+      setAgencyDetection(null);
+      setCurrentFormSchema(null);
+      setFormState([]);
+      setPendingField(null);
+      setExternalUpdate(null);
+
+      // Notify sidebar and update URL
+      notifyChatListUpdate();
+      const currentCategory = router.query.category || 'housing';
+      router.replace({
+        pathname: '/',
+        query: { chatId: newChatId, category: currentCategory }
+      }, undefined, { shallow: true });
     } else {
       // If no current chat, just clear state
       setMessages([]);
@@ -168,6 +187,9 @@ export default function Home() {
     if (idx >= 0) convs[idx] = { id: currentChatId, title, updatedAt };
     else convs.unshift({ id: currentChatId, title, updatedAt });
     saveStoredConversations(convs);
+
+    // Notify sidebar of the change
+    notifyChatListUpdate();
   }
 
   function deriveTitle(msgs: Message[]): string {
@@ -185,8 +207,51 @@ export default function Home() {
     const convs = getStoredConversations();
     convs.unshift({ id: newId, title: 'New chat', updatedAt: Date.now() });
     saveStoredConversations(convs);
+    // Notify sidebar of the change
+    notifyChatListUpdate();
     // Update URL
     router.replace({ pathname: '/', query: { ...router.query, chatId: newId, category: router.query.category } }, undefined, { shallow: true });
+  }
+
+  function notifyChatListUpdate() {
+    // Dispatch custom event to update sidebar immediately
+    window.dispatchEvent(new CustomEvent('chatListUpdated'));
+  }
+
+  function handleChatChange(chatId: string) {
+    // Load the selected chat
+    setCurrentChatId(chatId);
+    const stored = localStorage.getItem(`chat:${chatId}`);
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) {
+          setMessages(parsed);
+        } else {
+          setMessages([]);
+        }
+      } catch {
+        setMessages([]);
+      }
+    } else {
+      setMessages([]);
+    }
+
+    // Reset other states
+    setSelectedAgency(null);
+    setAgencyDetection(null);
+    setFormSchema(null);
+    setCurrentFormSchema(null);
+    setFormState([]);
+    setPendingField(null);
+    setExternalUpdate(null);
+
+    // Update URL with current category preserved
+    const currentCategory = router.query.category || 'housing';
+    router.replace({
+      pathname: '/',
+      query: { chatId, category: currentCategory }
+    }, undefined, { shallow: true });
   }
 
   // Restore chat history and user preferences from localStorage on component mount
@@ -206,6 +271,7 @@ export default function Home() {
       setMessages([]);
       saveStoredConversations([{ id: newId, title: 'New chat', updatedAt: Date.now() }]);
       localStorage.setItem(`chat:${newId}`, JSON.stringify([]));
+      notifyChatListUpdate();
       router.replace({ pathname: '/', query: { ...router.query, chatId: newId, category: router.query.category } }, undefined, { shallow: true });
     } else {
       setCurrentChatId(effectiveId);
@@ -239,7 +305,7 @@ export default function Home() {
     }
 
     console.log("✅ Restored user preferences from localStorage");
-  }, [router.isReady, router.query.category]); // Run when router is ready or category changes
+  }, [router.isReady, router.query.category, router.query.chatId]); // Run when router is ready, category changes, or chatId changes
 
   // Save chat history to localStorage whenever messages change
   useEffect(() => {
@@ -703,11 +769,13 @@ export default function Home() {
 
   return (
     <div className="flex h-screen bg-gradient-to-br from-red-50 via-white to-yellow-50">
-      <Sidebar 
-        settings={settings} 
+      <Sidebar
+        settings={settings}
         onSettingsChange={setSettings}
         userProfile={user ? { name: profile?.full_name || user.email || 'User', email: user.email || '', avatar: undefined } : undefined}
         onLogout={signOut}
+        currentChatId={currentChatId}
+        onChatChange={handleChatChange}
       />
       
       <div className="flex-1 flex flex-col">

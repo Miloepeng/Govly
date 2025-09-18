@@ -115,7 +115,7 @@ export default function ChatMessage({
       });
       if (response.ok) {
         const data = await response.json();
-        console.log("✅ extractFormPreprocessed response:", data);
+        console.log("✅ extractFormById response:", data);
 
         // Set the extracted form schema for display
         setExtractedFormSchema(data);

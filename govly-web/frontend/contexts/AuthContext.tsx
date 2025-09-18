@@ -7,7 +7,6 @@ interface AuthContextType {
   profile: UserProfile | null
   session: Session | null
   loading: boolean
-  signUp: (email: string, password: string, fullName: string) => Promise<{ error: any }>
   signIn: (email: string, password: string) => Promise<{ error: any; session?: Session | null }>
   signOut: () => Promise<void>
   updateProfile: (updates: Partial<UserProfile>) => Promise<{ error: any }>
@@ -169,32 +168,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  const signUp = async (email: string, password: string, fullName: string) => {
-    try {
-      const supabaseClient = supabase
-      const { error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: {
-            full_name: fullName,
-          },
-        },
-      })
-      
-      if (error) {
-        return { error }
-      }
-      
-      return { error: null }
-    } catch (err) {
-      return { 
-        error: { 
-          message: 'Network error. Please check your Supabase configuration.' 
-        } 
-      }
-    }
-  }
 
   const signIn = async (email: string, password: string) => {
     try {
@@ -336,7 +309,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     profile,
     session,
     loading,
-    signUp,
     signIn,
     signOut,
     updateProfile,
