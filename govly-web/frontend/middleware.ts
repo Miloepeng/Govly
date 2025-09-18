@@ -9,8 +9,8 @@ export async function middleware(req: NextRequest) {
   // Get the pathname
   const path = req.nextUrl.pathname;
   
-  // Redirect root to login if no category query param (since chat lives at /?category=X)
-  if (path === '/' && !req.nextUrl.searchParams.has('category')) {
+  // Redirect root to login if no category query param AND no chatId (since chat lives at /?category=X or /?chatId=Y)
+  if (path === '/' && !req.nextUrl.searchParams.has('category') && !req.nextUrl.searchParams.has('chatId')) {
     return NextResponse.redirect(new URL('/login', req.url));
   }
 

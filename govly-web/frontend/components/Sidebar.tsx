@@ -19,9 +19,11 @@ interface SidebarProps {
   onSettingsChange: (settings: SettingsState) => void;
   userProfile?: UserProfile;
   onLogout: () => void;
+  currentChatId?: string | null;
+  onChatChange?: (chatId: string) => void;
 }
 
-export default function Sidebar({ settings, onSettingsChange, userProfile, onLogout }: SidebarProps) {
+export default function Sidebar({ settings, onSettingsChange, userProfile, onLogout, currentChatId, onChatChange }: SidebarProps) {
   const [isOpen, setIsOpen] = useState(true);
   const [savedChats, setSavedChats] = useState<Array<{ id: string; title: string; updatedAt: number }>>([]);
   const [isSettingsOpenExpanded, setIsSettingsOpenExpanded] = useState(false);
@@ -42,7 +44,15 @@ export default function Sidebar({ settings, onSettingsChange, userProfile, onLog
       if (e.key === 'chatConversations') loadChats();
     };
     window.addEventListener('storage', onStorage);
-    return () => window.removeEventListener('storage', onStorage);
+
+    // Set up a custom event listener for immediate chat list updates
+    const onChatListUpdate = () => loadChats();
+    window.addEventListener('chatListUpdated', onChatListUpdate);
+
+    return () => {
+      window.removeEventListener('storage', onStorage);
+      window.removeEventListener('chatListUpdated', onChatListUpdate);
+    };
   }, []);
 
   function startNewChatFromSidebar() {
@@ -51,15 +61,35 @@ export default function Sidebar({ settings, onSettingsChange, userProfile, onLog
     const updated = [{ id: newId, title: 'New chat', updatedAt: Date.now() }, ...savedChats];
     localStorage.setItem('chatConversations', JSON.stringify(updated));
     setSavedChats(updated);
-    const search = new URLSearchParams(window.location.search);
-    search.set('chatId', newId);
-    window.location.href = `/${search.toString() ? `?${search.toString()}` : ''}`;
+
+    if (onChatChange) {
+      // Use the callback to switch to the new chat (preferred method)
+      onChatChange(newId);
+    } else {
+      // Fallback to direct URL manipulation if no callback provided
+      const search = new URLSearchParams(window.location.search);
+      search.set('chatId', newId);
+      // Ensure we have a category parameter - default to 'housing' if not present
+      if (!search.has('category')) {
+        search.set('category', 'housing');
+      }
+      window.location.href = `/${search.toString() ? `?${search.toString()}` : ''}`;
+    }
   }
 
   function openChat(chatId: string) {
-    const search = new URLSearchParams(window.location.search);
-    search.set('chatId', chatId);
-    window.location.href = `/${search.toString() ? `?${search.toString()}` : ''}`;
+    if (onChatChange) {
+      onChatChange(chatId);
+    } else {
+      // Fallback to direct URL manipulation if no callback provided
+      const search = new URLSearchParams(window.location.search);
+      search.set('chatId', chatId);
+      // Ensure we have a category parameter - default to 'housing' if not present
+      if (!search.has('category')) {
+        search.set('category', 'housing');
+      }
+      window.location.href = `/${search.toString() ? `?${search.toString()}` : ''}`;
+    }
   }
 
   function deleteChat(chatId: string) {
@@ -67,6 +97,24 @@ export default function Sidebar({ settings, onSettingsChange, userProfile, onLog
     const updated = savedChats.filter(c => c.id !== chatId);
     localStorage.setItem('chatConversations', JSON.stringify(updated));
     setSavedChats(updated);
+
+    // If deleting the current chat, we need to switch to another one or create new
+    if (currentChatId === chatId && onChatChange) {
+      if (updated.length > 0) {
+        // Switch to the most recent chat
+        const mostRecent = updated.sort((a, b) => b.updatedAt - a.updatedAt)[0];
+        onChatChange(mostRecent.id);
+      } else {
+        // No chats left, create a new one
+        const newChatId = `${Date.now()}`;
+        localStorage.setItem(`chat:${newChatId}`, JSON.stringify([]));
+        const newChat = { id: newChatId, title: 'New chat', updatedAt: Date.now() };
+        const newChats = [newChat];
+        localStorage.setItem('chatConversations', JSON.stringify(newChats));
+        setSavedChats(newChats);
+        onChatChange(newChatId);
+      }
+    }
   }
 
   return (
@@ -146,7 +194,11 @@ export default function Sidebar({ settings, onSettingsChange, userProfile, onLog
                   <div key={chat.id} className="group relative">
                     <button
                       onClick={() => openChat(chat.id)}
-                      className="w-full h-12 text-left pl-5 pr-12 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 hover:border-red-300 text-sm text-gray-800 truncate"
+                      className={`w-full h-12 text-left pl-5 pr-12 rounded-xl border text-sm truncate transition-colors ${
+                        currentChatId === chat.id
+                          ? 'border-red-300 bg-red-50 text-red-900 font-medium'
+                          : 'border-gray-200 bg-white hover:bg-gray-50 hover:border-red-300 text-gray-800'
+                      }`}
                       title={chat.title || 'Untitled chat'}
                     >
                       {chat.title || 'Untitled chat'}
@@ -343,11 +395,15 @@ export default function Sidebar({ settings, onSettingsChange, userProfile, onLog
                 <button
                   key={chat.id}
                   onClick={() => openChat(chat.id)}
-                  className="w-12 h-12 flex items-center justify-center rounded-xl border border-gray-200 bg-white hover:border-red-300 hover:bg-red-50 active:scale-95 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
+                  className={`w-12 h-12 flex items-center justify-center rounded-xl border active:scale-95 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 ${
+                    currentChatId === chat.id
+                      ? 'border-red-300 bg-red-50'
+                      : 'border-gray-200 bg-white hover:border-red-300 hover:bg-red-50'
+                  }`}
                   aria-label={chat.title || 'Untitled chat'}
                   title={chat.title || 'Untitled chat'}
                 >
-                  <ChatBubbleIcon className="w-5 h-5 text-gray-700" />
+                  <ChatBubbleIcon className={`w-5 h-5 ${currentChatId === chat.id ? 'text-red-700' : 'text-gray-700'}`} />
                 </button>
               ))}
             </div>

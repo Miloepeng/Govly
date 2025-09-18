@@ -7,7 +7,6 @@ import AuthModal from './AuthModal';
 export default function DashboardHeader() {
   const { user, profile, signOut, loading } = useAuth();
   const [showAuthModal, setShowAuthModal] = useState(false);
-  const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin');
   // Removed UserProfile modal
 
   return (
@@ -69,8 +68,6 @@ export default function DashboardHeader() {
         <AuthModal
           isOpen={showAuthModal}
           onClose={() => setShowAuthModal(false)}
-          mode={authMode}
-          onModeChange={setAuthMode}
         />
       )}
 

@@ -21,9 +21,6 @@ NEXT_PUBLIC_API_URL=http://your-domain.com:8000
 NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
 
-# AI Configuration
-OPENAI_API_KEY=your_openai_api_key
-
 # AWS Configuration (for Textract)
 AWS_ACCESS_KEY_ID=your_aws_access_key_id
 AWS_SECRET_ACCESS_KEY=your_aws_secret_access_key

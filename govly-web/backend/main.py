@@ -786,15 +786,15 @@ async def extract_form(request: ExtractFormRequest):
         # Resolve filename and map to backend/forms
         filename = os.path.basename(pdf_url)
         forms_dir = os.path.join(current_dir, "forms")
-        tmp_pdf_path = os.path.join(forms_dir, filename)
+        file_path = os.path.join(forms_dir, filename)
 
-        if not os.path.exists(tmp_pdf_path):
-            raise HTTPException(status_code=404, detail=f"PDF not found: {tmp_pdf_path}")
+        if not os.path.exists(file_path):
+            raise HTTPException(status_code=404, detail=f"File not found: {file_path}")
 
-        print(f"📄 Using local PDF path: {tmp_pdf_path}")
+        print(f"📄 Using local file path: {file_path}")
 
         # OCR step
-        result = extract_pdf_to_text(tmp_pdf_path)
+        result = extract_pdf_to_text(file_path)
         if "error" in result:
             print("❌ OCR error:", result["error"])
             raise HTTPException(status_code=500, detail=result["error"])
@@ -1097,15 +1097,15 @@ async def extract_form_fallback(request: ExtractFormRequest):
         # Extract filename from URL (handles Windows paths)
         filename = extract_filename_from_url(pdf_url)
         forms_dir = os.path.join(current_dir, "forms")
-        tmp_pdf_path = os.path.join(forms_dir, filename)
+        file_path = os.path.join(forms_dir, filename)
 
-        if not os.path.exists(tmp_pdf_path):
-            raise HTTPException(status_code=404, detail=f"PDF not found: {tmp_pdf_path}")
+        if not os.path.exists(file_path):
+            raise HTTPException(status_code=404, detail=f"File not found: {file_path}")
 
-        print(f"📄 Using local PDF path: {tmp_pdf_path}")
+        print(f"📄 Using local file path: {file_path}")
 
         # OCR step
-        result = extract_pdf_to_text(tmp_pdf_path)
+        result = extract_pdf_to_text(file_path)
         if "error" in result:
             print("❌ OCR error:", result["error"])
             raise HTTPException(status_code=500, detail=result["error"])
@@ -1179,6 +1179,116 @@ async def extract_form_fallback(request: ExtractFormRequest):
 
     except Exception as e:
         print("💥 Exception in extract_form_fallback:", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/extractFormDirect")
+async def extract_form_direct(request: ExtractFormRequest):
+    """Extract form fields directly using OCR - bypasses preprocessed data completely."""
+    try:
+        pdf_url = request.url
+        print(f"🔥 DIRECT OCR: Received form path/url: {pdf_url}")
+
+        # Extract filename from URL (handles Windows paths)
+        filename = extract_filename_from_url(pdf_url)
+        print(f"🔍 DIRECT OCR: Looking for file: {filename}")
+
+        forms_dir = os.path.join(current_dir, "forms")
+
+        # Try to find the file - first try exact match, then try with timestamp prefix
+        file_path = os.path.join(forms_dir, filename)
+
+        if not os.path.exists(file_path):
+            print(f"⚠️ DIRECT OCR: Exact filename not found: {filename}")
+            # Try to find file with timestamp prefix (from upload)
+            import glob
+            pattern = os.path.join(forms_dir, f"*_{filename}")
+            matches = glob.glob(pattern)
+            if matches:
+                file_path = matches[0]  # Take the first match
+                print(f"✅ DIRECT OCR: Found timestamped file: {os.path.basename(file_path)}")
+            else:
+                print(f"❌ DIRECT OCR: No files found matching pattern: *_{filename}")
+                raise HTTPException(status_code=404, detail=f"File not found: {filename}")
+
+        print(f"📄 DIRECT OCR: Using file path: {file_path}")
+
+        # Go directly to OCR - no preprocessed data lookup
+        result = extract_pdf_to_text(file_path)
+        if "error" in result:
+            print("❌ DIRECT OCR: OCR error:", result["error"])
+            raise HTTPException(status_code=500, detail=result["error"])
+
+        text = result.get("text", "").strip()
+        print(f"📝 DIRECT OCR: Extracted text length: {len(text)}")
+
+        if not text:
+            return {
+                "fields": [
+                    {
+                        "name": "manual_entry",
+                        "type": "text",
+                        "label": "⚠️ OCR produced no text, please fill manually"
+                    }
+                ]
+            }
+
+        # Clean OCR text and process with LangChain
+        cleaned_text = clean_ocr_text(text)
+
+        # Get LangChain form processing handler
+        form_chain = get_form_chain()
+        fields_json = form_chain.extract_form_fields(cleaned_text)
+        print(f"🤖 DIRECT OCR: LangChain extraction response: {fields_json}")
+
+        if "error" in fields_json:
+            print("❌ DIRECT OCR: Form extraction error:", fields_json)
+            raise HTTPException(status_code=500, detail=str(fields_json))
+
+        # Normalize LLM response
+        fields_list = []
+        if "fields" in fields_json and isinstance(fields_json["fields"], list):
+            fields_list = fields_json["fields"]
+        elif "form_fields" in fields_json and isinstance(fields_json["form_fields"], list):
+            fields_list = [
+                {
+                    "name": f.get("field_name", ""),
+                    "type": map_field_type(f.get("field_type", "")),
+                    "label": f.get("field_name", "Unnamed field"),
+                    "required": f.get("required", False),
+                    "description": f.get("description", "")
+                }
+                for f in fields_json["form_fields"]
+            ]
+
+        # Normalize all fields
+        all_fields = [
+            {
+                "name": normalize_field_name(f.get("name", "")),
+                "type": map_field_type(f.get("type", "")),
+                "label": f.get("label", "Unnamed field"),
+                "required": f.get("required", False),
+                "description": f.get("description", "")
+            }
+            for f in fields_list
+        ]
+
+        # Remove duplicates
+        seen_fields = set()
+        unique_fields = []
+
+        for field in all_fields:
+            field_key = (field["name"], field["type"])
+            if field_key not in seen_fields:
+                seen_fields.add(field_key)
+                unique_fields.append(field)
+
+        print(f"✅ DIRECT OCR: Successfully extracted {len(unique_fields)} unique fields")
+        return {"fields": unique_fields}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print("💥 DIRECT OCR: Exception in extract_form_direct:", e)
         raise HTTPException(status_code=500, detail=str(e))
 
 # Explain API endpoint

@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { ApplicationService } from '../lib/applicationService';
 import { FormAutofillService } from '../lib/formAutofillService';
 import { v4 as uuidv4 } from 'uuid';
+import toast, { Toaster } from 'react-hot-toast';
 
 interface Field {
   name: string;
@@ -167,16 +168,46 @@ export default function DynamicForm({
     });
   };
 
+  // Validation function to check if all required fields are filled
+  const validateForm = () => {
+    const requiredFields = schema.fields.filter(field => field.required);
+    const emptyRequiredFields: string[] = [];
+
+    requiredFields.forEach(field => {
+      const value = formData[field.name];
+      if (!value || value.toString().trim() === '') {
+        emptyRequiredFields.push(field.label || field.name);
+      }
+    });
+
+    return emptyRequiredFields;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     console.log('🚀 Submit button clicked!', { user: user?.id, formData });
-    
+
     if (!user) {
-      alert("Please sign in to submit applications.");
+      toast.error("Please sign in to submit applications.");
       return;
     }
-    
+
+    // Validate all required fields are filled
+    const emptyRequiredFields = validateForm();
+    if (emptyRequiredFields.length > 0) {
+      toast.error(
+        `Please fill up all required fields: ${emptyRequiredFields.join(', ')}`,
+        {
+          duration: 5000,
+          style: {
+            maxWidth: '500px',
+          },
+        }
+      );
+      return;
+    }
+
     try {
       // Clear any pending auto-save
       if (saveTimeoutRef.current) {
@@ -207,15 +238,17 @@ export default function DynamicForm({
       
       if (error) {
         console.error('❌ Submit error:', error);
-        alert(`Failed to save application: ${error.message || 'Unknown error'}`);
+        toast.error(`Failed to save application: ${error.message || 'Unknown error'}`);
         return;
       }
 
       console.log('✅ Application saved successfully!');
-      alert("Application submitted and saved! You can track it on the Status page.");
+      toast.success("Application submitted and saved! You can track it on the Status page.", {
+        duration: 4000,
+      });
     } catch (error) {
       console.error('💥 Submit error:', error);
-      alert(`Failed to save application: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      toast.error(`Failed to save application: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };
 
@@ -299,7 +332,9 @@ export default function DynamicForm({
 
       // Check if we have any chat history to work with
       if (filteredHistory.length === 0) {
-        alert("⚠️ No chat history found. Please have a conversation first so AI can understand what to fill in.");
+        toast.error("⚠️ No chat history found. Please have a conversation first so AI can understand what to fill in.", {
+          duration: 4000,
+        });
         setIsAIFilling(false);
         return;
       }
@@ -419,20 +454,31 @@ export default function DynamicForm({
           const remainingFields = schema.fields.length - totalFilledCount;
           
           if (fieldsFilledByAI > 0 && remainingFields > 0) {
-            alert(`✅ AI successfully filled ${fieldsFilledByAI} fields! ${remainingFields} fields still need your input. ${totalFilledCount} of ${schema.fields.length} fields are now complete.`);
+            toast.success(`✅ AI successfully filled ${fieldsFilledByAI} fields! ${remainingFields} fields still need your input. ${totalFilledCount} of ${schema.fields.length} fields are now complete.`, {
+              duration: 6000,
+            });
           } else if (fieldsFilledByAI > 0) {
-            alert(`✅ AI successfully filled ${fieldsFilledByAI} fields! All ${totalFilledCount} of ${schema.fields.length} fields are now complete.`);
+            toast.success(`✅ AI successfully filled ${fieldsFilledByAI} fields! All ${totalFilledCount} of ${schema.fields.length} fields are now complete.`, {
+              duration: 6000,
+            });
           } else if (remainingFields > 0) {
-            alert(`ℹ️ AI couldn't determine values for ${fieldsToAsk} fields. ${remainingFields} fields still need your input. ${totalFilledCount} of ${schema.fields.length} fields are currently complete.`);
+            toast(`ℹ️ AI couldn't determine values for ${fieldsToAsk} fields. ${remainingFields} fields still need your input. ${totalFilledCount} of ${schema.fields.length} fields are currently complete.`, {
+              duration: 6000,
+              icon: 'ℹ️',
+            });
           } else {
-            alert(`✅ All fields are already filled! ${totalFilledCount} of ${schema.fields.length} fields complete.`);
+            toast.success(`✅ All fields are already filled! ${totalFilledCount} of ${schema.fields.length} fields complete.`, {
+              duration: 5000,
+            });
           }
           
           // Update the form data display to show which fields were filled by AI
           console.log(`🤖 AI autofill summary: ${fieldsFilledByAI} fields filled by AI, ${remainingFields} fields still need input`);
         } else {
           console.error("Invalid response format from AI autofill");
-          alert("❌ AI autofill failed: Invalid response format");
+          toast.error("❌ AI autofill failed: Invalid response format", {
+            duration: 4000,
+          });
         }
       } else {
         const errorText = await response.text();
@@ -451,19 +497,27 @@ export default function DynamicForm({
           errorMessage += ` - ${errorText}`;
         }
         
-        alert(errorMessage);
+        toast.error(errorMessage, {
+          duration: 5000,
+        });
       }
     } catch (err) {
       console.error("Error in AI fill:", err);
       
       if (err instanceof Error) {
         if (err.name === 'AbortError') {
-          alert("⏰ AI autofill timed out after 60 seconds. Please try again with a shorter conversation.");
+          toast.error("⏰ AI autofill timed out after 60 seconds. Please try again with a shorter conversation.", {
+            duration: 6000,
+          });
         } else {
-          alert(`❌ AI autofill error: ${err.message}`);
+          toast.error(`❌ AI autofill error: ${err.message}`, {
+            duration: 5000,
+          });
         }
       } else {
-        alert(`❌ AI autofill error: Unknown error occurred`);
+        toast.error(`❌ AI autofill error: Unknown error occurred`, {
+          duration: 4000,
+        });
       }
     } finally {
       setIsAIFilling(false);
@@ -471,7 +525,7 @@ export default function DynamicForm({
   };
 
   return (
-    <div className="p-4 border rounded-lg bg-white shadow">
+    <div className="w-full max-w-none p-6 lg:p-8 border rounded-xl bg-white shadow-sm">
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-xl font-semibold text-gray-900">Dynamic Form</h2>
         <button
@@ -553,12 +607,22 @@ export default function DynamicForm({
       <div className="mb-6">
         <div className="bg-gradient-to-r from-red-50 to-rose-50 border border-red-200 rounded-xl p-6">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-red-900">
+            <h3 className="text-lg font-semibold text-red-900 flex items-center gap-2">
               {currentField.label}
+              {currentField.required && (
+                <span className="text-red-600 text-sm font-normal">*</span>
+              )}
             </h3>
-            <span className="text-sm text-red-700 bg-red-100 px-2 py-1 rounded-full">
-              {currentField.type}
-            </span>
+            <div className="flex items-center gap-2">
+              {currentField.required && (
+                <span className="text-xs text-red-700 bg-red-100 px-2 py-1 rounded-full">
+                  Required
+                </span>
+              )}
+              <span className="text-sm text-red-700 bg-red-100 px-2 py-1 rounded-full">
+                {currentField.type}
+              </span>
+            </div>
           </div>
           
           {currentField.description && (
@@ -694,18 +758,65 @@ export default function DynamicForm({
       <div className="text-center">
         {(() => {
           const completionPercentage = calculateCompletionPercentage(formData);
-          
+          const emptyRequiredFields = validateForm();
+          const isFormValid = emptyRequiredFields.length === 0;
+
           return (
-            <button
-              type="submit"
-              onClick={handleSubmit}
-              className="px-8 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-lg font-medium"
-            >
-              Submit Form ({completionPercentage}% Complete)
-            </button>
+            <div className="space-y-3">
+              {!isFormValid && (
+                <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg p-3">
+                  <p className="font-medium mb-1">Missing required fields:</p>
+                  <ul className="list-disc list-inside space-y-1">
+                    {emptyRequiredFields.map((field, index) => (
+                      <li key={index}>{field}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              <button
+                type="submit"
+                onClick={handleSubmit}
+                className={`px-8 py-3 rounded-lg transition-colors text-lg font-medium ${
+                  isFormValid
+                    ? 'bg-green-600 text-white hover:bg-green-700'
+                    : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                }`}
+                disabled={!isFormValid}
+              >
+                {isFormValid
+                  ? `Submit Form (${completionPercentage}% Complete)`
+                  : `Please Fill All Required Fields (${completionPercentage}% Complete)`
+                }
+              </button>
+            </div>
           );
         })()}
       </div>
+
+      {/* Toast Notifications */}
+      <Toaster
+        position="top-right"
+        toastOptions={{
+          duration: 3000,
+          style: {
+            background: '#fff',
+            color: '#374151',
+            border: '1px solid #d1d5db',
+            borderRadius: '0.5rem',
+          },
+          success: {
+            style: {
+              border: '1px solid #10b981',
+            },
+          },
+          error: {
+            style: {
+              border: '1px solid #ef4444',
+            },
+          },
+        }}
+      />
     </div>
   );
 }

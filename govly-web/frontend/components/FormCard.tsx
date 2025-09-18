@@ -30,7 +30,7 @@ export default function FormCard({ result, setFormSchema, chatHistory }: FormCar
       console.log("🔍 Attempting to extract form from:", result.url);
       setDebugInfo({ step: "Starting extraction", url: result.url });
 
-      const response = await fetch('/api/extractFormPreprocessed', {
+      const response = await fetch('/api/extractFormDirect', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url: result.url }),
@@ -41,7 +41,7 @@ export default function FormCard({ result, setFormSchema, chatHistory }: FormCar
 
       if (response.ok) {
         const data = await response.json();
-        console.log("✅ extractFormPreprocessed response:", data);
+        console.log("✅ extractFormDirect response:", data);
         setDebugInfo({ step: "Data received", data });
 
         // Check if we have valid form fields
